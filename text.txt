@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Groupe Ararat Construction</title>
+  <meta name="description" content="Premium construction, renovation, project management, and investor projects in Montreal." />
+  <style>
+    :root{
+      --bg:#0b0b0d;
+      --bg2:#111216;
+      --panel:#15171c;
+      --text:#f4f4f4;
+      --muted:#b8b8b8;
+      --gold:#c8a34a;
+      --gold2:#9d7721;
+      --line:rgba(200,163,74,.28);
+      --white-line:rgba(255,255,255,.08);
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(200,163,74,.10), transparent 22%),
+        linear-gradient(180deg,#0a0a0c 0%, #0d0f12 100%);
+    }
+    a{text-decoration:none;color:inherit}
+    img{max-width:100%;display:block}
+    .wrap{width:min(1180px, calc(100% - 40px)); margin:0 auto}
+    .top{
+      position:sticky;
+      top:0;
+      z-index:20;
+      backdrop-filter:blur(10px);
+      background:rgba(11,11,13,.88);
+      border-bottom:1px solid var(--white-line);
+    }
+    .nav{
+      min-height:84px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:18px;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+    .brand svg{
+      height:46px;
+      width:auto;
+      flex:0 0 auto;
+    }
+    .menu{
+      display:flex;
+      align-items:center;
+      gap:22px;
+      flex-wrap:wrap;
+      color:var(--muted);
+      font-size:14px;
+    }
+    .menu a:hover,
+    .lang button:hover{color:var(--text)}
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:46px;
+      padding:0 18px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      font-weight:700;
+      cursor: pointer;
+    }
+    .btn.gold{
+      color:#111;
+      border:none;
+      background:linear-gradient(180deg,#e1c16b 0%, #c8a34a 58%, #a57c23 100%);
+    }
+    .lang{
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .lang button{
+      background:none;
+      border:none;
+      color:var(--muted);
+      cursor:pointer;
+      font:inherit;
+      padding:0;
+    }
+    .lang .active{color:var(--gold)}
+
+    .hero{
+      padding:76px 0 56px;
+    }
+    .hero-grid{
+      display:grid;
+      grid-template-columns:1.05fr .95fr;
+      gap:28px;
+      align-items:center;
+    }
+    .eyebrow{
+      color:var(--gold);
+      text-transform:uppercase;
+      letter-spacing:.22em;
+      font-size:12px;
+      font-weight:700;
+      margin-bottom:18px;
+    }
+    h1{
+      margin:0 0 16px;
+      font-size:clamp(38px,7vw,72px);
+      line-height:.96;
+      letter-spacing:-.04em;
+      max-width:11ch;
+    }
+    .lead{
+      margin:0 0 24px;
+      color:var(--muted);
+      line-height:1.78;
+      font-size:17px;
+      max-width:62ch;
+    }
+    .actions{
+      display:flex;
+      gap:14px;
+      flex-wrap:wrap;
+    }
+
+    .hero-media,
+    .card,
+    .gallery-item,
+    .cta{
+      border:1px solid var(--white-line);
+      border-radius:24px;
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      box-shadow:0 16px 36px rgba(0,0,0,.18);
+    }
+    .hero-media{
+      overflow:hidden;
+    }
+    .hero-media img,
+    .placeholder{
+      width:100%;
+      aspect-ratio:4/3;
+      object-fit:cover;
+    }
+    .placeholder{
+      display:grid;
+      place-items:center;
+      color:var(--gold);
+      font-size:24px;
+      letter-spacing:.12em;
+      background:
+        linear-gradient(135deg, rgba(200,163,74,.16), rgba(255,255,255,.03)),
+        repeating-linear-gradient(0deg, transparent 0 26px, rgba(255,255,255,.04) 26px 27px),
+        repeating-linear-gradient(90deg, transparent 0 26px, rgba(255,255,255,.04) 26px 27px),
+        #13151b;
+    }
+    .hero-meta{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+    }
+    .stat,
+    .card{
+      padding:24px;
+    }
+    .label{
+      display:block;
+      color:var(--gold);
+      text-transform:uppercase;
+      letter-spacing:.18em;
+      font-size:11px;
+      margin-bottom:6px;
+    }
+    .value{
+      font-weight:700;
+    }
+
+    section{
+      padding:26px 0;
+    }
+    .section-head{
+      margin-bottom:20px;
+    }
+    .section-head h2{
+      margin:0 0 10px;
+      font-size:clamp(28px,4vw,44px);
+      letter-spacing:-.03em;
+    }
+    .section-head p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.75;
+      max-width:760px;
+    }
+
+    .grid-3{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:16px;
+    }
+    .grid-2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+    .grid-4{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:16px;
+    }
+
+    .tag{
+      display:inline-block;
+      margin-bottom:12px;
+      padding:7px 11px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      color:var(--gold);
+      background:rgba(200,163,74,.08);
+      text-transform:uppercase;
+      letter-spacing:.16em;
+      font-size:11px;
+    }
+    .card h3{
+      margin:0 0 10px;
+      font-size:22px;
+      letter-spacing:-.02em;
+    }
+    .card p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.72;
+    }
+
+    .gallery-item{
+      overflow:hidden;
+    }
+    .gallery-item img,
+    .gallery-item .ph{
+      width:100%;
+      aspect-ratio:4/3;
+      object-fit:cover;
+      border-bottom:1px solid var(--white-line);
+    }
+    .gallery-item .ph{
+      display:grid;
+      place-items:center;
+      color:var(--gold);
+      background:
+        linear-gradient(135deg, rgba(200,163,74,.16), rgba(255,255,255,.03)),
+        repeating-linear-gradient(0deg, transparent 0 26px, rgba(255,255,255,.04) 26px 27px),
+        repeating-linear-gradient(90deg, transparent 0 26px, rgba(255,255,255,.04) 26px 27px),
+        #13151b;
+    }
+    .gallery-body{
+      padding:18px 20px;
+    }
+    .gallery-body strong{
+      display:block;
+      margin-bottom:6px;
+      font-size:18px;
+    }
+    .gallery-body span{
+      color:var(--muted);
+      line-height:1.72;
+      font-size:14px;
+    }
+
+    .stepnum{
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      display:grid;
+      place-items:center;
+      border:1px solid var(--line);
+      color:var(--gold);
+      font-weight:700;
+      margin-bottom:12px;
+    }
+
+    .cta{
+      padding:28px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:18px;
+      flex-wrap:wrap;
+      background:linear-gradient(135deg, rgba(200,163,74,.14), rgba(255,255,255,.03) 55%, rgba(0,0,0,.08));
+    }
+    .cta h3{
+      margin:0 0 8px;
+      font-size:30px;
+    }
+    .cta p{
+      margin:0;
+      color:var(--muted);
+    }
+
+    .k{
+      display:block;
+      color:var(--gold);
+      text-transform:uppercase;
+      letter-spacing:.18em;
+      font-size:11px;
+      margin-bottom:5px;
+    }
+    .v{
+      font-size:20px;
+      font-weight:700;
+    }
+    .contact-item{
+      margin-bottom:16px;
+    }
+    .contact-item:last-child{
+      margin-bottom:0;
+    }
+
+    .map-box{
+      border-radius:18px;
+      overflow:hidden;
+      border:1px solid var(--white-line);
+    }
+    iframe{
+      display:block;
+      width:100%;
+      border:0;
+    }
+
+    form{
+      display:grid;
+      gap:14px;
+    }
+    .form-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+    }
+    input, select, textarea{
+      width:100%;
+      padding:14px 15px;
+      border-radius:14px;
+      border:1px solid var(--white-line);
+      background:#0f1013;
+      color:var(--text);
+      font:inherit;
+    }
+    textarea{
+      min-height:140px;
+      resize:vertical;
+    }
+    .note{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.7;
+    }
+
+    footer{
+      padding:28px 0 40px;
+      color:var(--muted);
+      font-size:13px;
+    }
+    .footer-line{
+      height:1px;
+      background:linear-gradient(90deg, transparent, var(--line), transparent);
+      margin-bottom:18px;
+    }
+
+    [data-lang="fr"]{display:none}
+    body.fr [data-lang="fr"]{display:inline}
+    body.fr [data-lang="en"]{display:none}
+    body.en [data-lang="en"]{display:inline}
+    body.en [data-lang="fr"]{display:none}
+
+    @media (max-width:980px){
+      .hero-grid,.grid-3,.grid-2,.grid-4,.form-grid{grid-template-columns:1fr}
+      .hero-meta{grid-template-columns:1fr}
+      .menu{display:none}
+    }
+  </style>
+</head>
+<body class="en">
+  <header class="top">
+    <div class="wrap nav">
+      <a class="brand" href="#top">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 70" role="img" aria-label="Groupe Ararat Construction">
+          <defs>
+            <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ead28a"/>
+              <stop offset="55%" stop-color="#c8a34a"/>
+              <stop offset="100%" stop-color="#9d7721"/>
+            </linearGradient>
+          </defs>
+          <rect x="1" y="1" width="66" height="66" rx="18" fill="#111216" stroke="#3a2e12"/>
+          <path d="M16 47 L30 20 L39 34 L46 25 L58 47" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M26 47 L36 31 L46 47" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="80" y="23" fill="#c8a34a" font-family="Arial, Helvetica, sans-serif" font-size="11" letter-spacing="3">GROUPE</text>
+          <text x="80" y="42" fill="#f4f4f4" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" letter-spacing="1.2">ARARAT</text>
+          <text x="80" y="58" fill="#b8b8b8" font-family="Arial, Helvetica, sans-serif" font-size="9" letter-spacing="2">CONSTRUCTION</text>
+        </svg>
+      </a>
+
+      <nav class="menu">
+        <a href="#top"><span data-lang="en">Home</span><span data-lang="fr">Accueil</span></a>
+        <a href="#services">Services</a>
+        <a href="#gallery"><span data-lang="en">Projects</span><span data-lang="fr">Projets</span></a>
+        <a href="#quote"><span data-lang="en">Quote</span><span data-lang="fr">Soumission</span></a>
+        <a href="#contact">Contact</a>
+        <span class="lang">
+          <button id="frBtn">FR</button> /
+          <button id="enBtn" class="active">EN</button>
+        </span>
+        <a class="btn gold" href="#quote"><span data-lang="en">Request a Quote</span><span data-lang="fr">Demander une soumission</span></a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <div class="eyebrow">
+            <span data-lang="en">Premium Construction Company</span>
+            <span data-lang="fr">Entreprise de construction haut de gamme</span>
+          </div>
+
+          <h1>
+            <span data-lang="en">Built with precision. Delivered with confidence.</span>
+            <span data-lang="fr">Bâtir avec précision. Livrer avec confiance.</span>
+          </h1>
+
+          <p class="lead">
+            <span data-lang="en">Premium construction, renovation, project management, and investor projects in Montreal.</span>
+            <span data-lang="fr">Construction, rénovation, gestion de projet et projets investisseurs à Montréal.</span>
+          </p>
+
+          <div class="actions">
+            <a class="btn gold" href="#quote"><span data-lang="en">Get a Free Estimate</span><span data-lang="fr">Obtenir une estimation</span></a>
+            <a class="btn" href="#gallery"><span data-lang="en">View Projects</span><span data-lang="fr">Voir les projets</span></a>
+          </div>
+        </div>
+
+        <div>
+          <div class="hero-media">
+            <div class="placeholder">ARARAT</div>
+          </div>
+          <div class="hero-meta">
+            <div class="stat">
+              <span class="label"><span data-lang="en">Brand Style</span><span data-lang="fr">Style de marque</span></span>
+              <span class="value"><span data-lang="en">Black, gold, minimal, luxury</span><span data-lang="fr">Noir, or, minimal, luxe</span></span>
+            </div>
+            <div class="stat">
+              <span class="label"><span data-lang="en">Core Message</span><span data-lang="fr">Message central</span></span>
+              <span class="value"><span data-lang="en">Quality • Precision • Reliability</span><span data-lang="fr">Qualité • Précision • Fiabilité</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="services">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Services</h2>
+        </div>
+
+        <div class="grid-3">
+          <div class="card">
+            <div class="tag">Residential</div>
+            <h3><span data-lang="en">Renovations & Extensions</span><span data-lang="fr">Rénovations & agrandissements</span></h3>
+            <p><span data-lang="en">Kitchen, bathroom, basement, layout upgrades, and premium finish work.</span><span data-lang="fr">Cuisine, salle de bain, sous-sol, reconfiguration et finitions haut de gamme.</span></p>
+          </div>
+
+          <div class="card">
+            <div class="tag">Commercial</div>
+            <h3><span data-lang="en">Commercial Fit-Out</span><span data-lang="fr">Aménagement commercial</span></h3>
+            <p><span data-lang="en">Professional execution for retail, office, and commercial interiors.</span><span data-lang="fr">Exécution professionnelle pour commerces, bureaux et espaces commerciaux.</span></p>
+          </div>
+
+          <div class="card">
+            <div class="tag">Management</div>
+            <h3><span data-lang="en">Project Management</span><span data-lang="fr">Gestion de projet</span></h3>
+            <p><span data-lang="en">Planning, budgeting, scheduling, and trade coordination.</span><span data-lang="fr">Planification, budget, échéancier, et coordination des corps de métier.</span></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact">
+      <div class="wrap">
+        <div class="section-head">
+          <h2><span data-lang="en">Contact & Location</span><span data-lang="fr">Contact & localisation</span></h2>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="contact-item"><span class="k"><span data-lang="en">Owner</span><span data-lang="fr">Propriétaire</span></span><span class="v">Zohrab Manoukion</span></div>
+            <div class="contact-item"><span class="k"><span data-lang="en">Phone</span><span data-lang="fr">Téléphone</span></span><span class="v">514 210-0164</span></div>
+            <div class="contact-item"><span class="k">Email</span><span class="v">info@araratconstruction.ca</span></div>
+            <div class="contact-item"><span class="k"><span data-lang="en">Location</span><span data-lang="fr">Localisation</span></span><span class="v">Montreal, QC</span></div>
+          </div>
+
+          <div class="card">
+            <div class="map-box">
+              <iframe title="Map" height="360" loading="lazy" src="https://maps.google.com/maps?q=Montreal&t=&z=13&ie=UTF8&iwloc=&output=embed"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="quote">
+      <div class="wrap">
+        <div class="section-head">
+          <h2><span data-lang="en">Request a Quote</span><span data-lang="fr">Demande de soumission</span></h2>
+        </div>
+
+        <div class="card">
+          <form name="ararat-contact" method="POST" data-netlify="true">
+            <div class="form-grid">
+              <input type="text" name="name" placeholder="Full name / Nom complet" required>
+              <input type="tel" name="phone" placeholder="Phone / Téléphone">
+            </div>
+            <div class="form-grid">
+              <input type="email" name="email" placeholder="Email" required>
+              <input type="text" name="address" placeholder="Project address / Adresse du projet">
+            </div>
+            <textarea name="message" placeholder="Describe your project / Décrivez votre projet" required></textarea>
+            <button class="btn gold" type="submit"><span data-lang="en">Send Request</span><span data-lang="fr">Envoyer la demande</span></button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-line"></div>
+      <div>&copy; 2026 Groupe Ararat Construction — Montreal</div>
+    </div>
+  </footer>
+
+  <script>
+    const body = document.body;
+    const frBtn = document.getElementById('frBtn');
+    const enBtn = document.getElementById('enBtn');
+
+    frBtn.addEventListener('click', () => {
+      body.classList.remove('en');
+      body.classList.add('fr');
+      frBtn.classList.add('active');
+      enBtn.classList.remove('active');
+    });
+
+    enBtn.addEventListener('click', () => {
+      body.classList.remove('fr');
+      body.classList.add('en');
+      enBtn.classList.add('active');
+      frBtn.classList.remove('active');
+    });
+  </script>
+</body>
+</html>
