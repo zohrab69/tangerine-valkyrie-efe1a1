@@ -59,60 +59,74 @@ print("wrote jarvis-ceo-v0.json")
 
 
 # ---------------------------------------------------------------------------
-# JARVIS CEO v1: same dispatcher, but multi-AI (free tiers first, OpenAI last)
-ORDER = ["gemini", "groq", "openrouter", "openai"]
-LABEL = {"gemini": "Gemini (free)", "groq": "Groq (free)", "openrouter": "OpenRouter (free)", "openai": "OpenAI (paid)"}
+# Multi-provider workflows: a chain of "Use X? -> Call X -> Got X" blocks, falling through on error.
 R = "$('Router (multi-AI)').first().json"
-n2 = [
-  node("b1", "Start (manual test)", "n8n-nodes-base.manualTrigger", 1, [0, 400], {}),
-  node("b2", "Owner request", "n8n-nodes-base.code", 2, [200, 400], {"jsCode": code("1-owner-request.js")}),
-  node("b3", "Router (multi-AI)", "n8n-nodes-base.code", 2, [400, 400], {"jsCode": code("gateway-router.js")}),
-  node("b9", "Parse, cost & log", "n8n-nodes-base.code", 2, [1500, 100], {"jsCode": code("gateway-parse.js")}),
-  node("b10", "All AIs unavailable: ask owner", "n8n-nodes-base.code", 2, [1500, 1100], {"jsCode":
-      "// No provider could answer (not set up, free limits used, budget reached, or all errored).\n"
-      "// Phase 2 sends this to the owner on Telegram.\n"
-      "const r = $('Router (multi-AI)').first().json;\n"
-      "return [{ json: { task_id: r.task_id, status: 'blocked_no_ai', skipped: r.skipped,\n"
-      "  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"}),
-  node("b11", "README", "n8n-nodes-base.stickyNote", 1, [-40, -160], {"width": 1300, "height": 240, "content":
-      "## JARVIS CEO v1 - multi-AI (free first, paid last)\n"
-      "Tries Gemini -> Groq -> OpenRouter -> OpenAI. Moves to the next only if one fails or is over its free limit / your budget.\n"
-      "Setup: in each **Call** node pick a credential. Gemini/Groq/OpenRouter: *Header Auth*, Name `Authorization`, Value `Bearer <your key>`. OpenAI: your OpenAI credential.\n"
-      "A provider without a key: set `enabled: false` for it in the Router code. OpenRouter starts disabled until you choose a free model.\n"
-      "Tasks with `contains_personal_data: true` never go to free tiers."}),
-]
-c2 = {
-  "Start (manual test)": {"main": [[{"node": "Owner request", "type": "main", "index": 0}]]},
-  "Owner request": {"main": [[{"node": "Router (multi-AI)", "type": "main", "index": 0}]]},
-  "Router (multi-AI)": {"main": [[{"node": "Use Gemini (free)?", "type": "main", "index": 0}]]},
-}
-for i, p in enumerate(ORDER):
-    y = 100 + i * 250
-    use, call, got = f"Use {LABEL[p]}?", f"Call {LABEL[p]}", f"Got {p}"
-    nxt = f"Use {LABEL[ORDER[i+1]]}?" if i + 1 < len(ORDER) else "All AIs unavailable: ask owner"
-    n2.append(node(f"u{i}", use, "n8n-nodes-base.if", 2.2, [650, y], {
-        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
-                       "conditions": [{"id": f"u{i}c", "leftValue": "={{ !!" + R + ".calls." + p + " }}", "rightValue": "",
-                                       "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
-                       "combinator": "and"}, "options": {}}))
-    params = {"method": "POST", "url": "={{ " + R + ".calls." + p + ".url }}",
-              "sendBody": True, "specifyBody": "json",
-              "jsonBody": "={{ JSON.stringify(" + R + ".calls." + p + ".body) }}",
-              "options": {"timeout": 60000}}
-    if p == "openai":
-        params.update({"authentication": "predefinedCredentialType", "nodeCredentialType": "openAiApi"})
-    else:
-        params.update({"authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth"})
-    n2.append(node(f"h{i}", call, "n8n-nodes-base.httpRequest", 4.2, [900, y], params,
-                   retryOnFail=True, maxTries=2, waitBetweenTries=3000, onError="continueErrorOutput"))
-    n2.append(node(f"g{i}", got, "n8n-nodes-base.set", 3.4, [1150, y], {
-        "mode": "manual", "includeOtherFields": True, "options": {},
-        "assignments": {"assignments": [{"id": f"g{i}a", "name": "_provider", "value": p, "type": "string"}]}}))
-    c2[use] = {"main": [[{"node": call, "type": "main", "index": 0}], [{"node": nxt, "type": "main", "index": 0}]]}
-    c2[call] = {"main": [[{"node": got, "type": "main", "index": 0}], [{"node": nxt, "type": "main", "index": 0}]]}
-    c2[got] = {"main": [[{"node": "Parse, cost & log", "type": "main", "index": 0}]]}
 
-wf2 = {"name": "JARVIS CEO v1 (multi-AI)", "nodes": n2, "connections": c2,
-       "settings": {"executionOrder": "v1", "saveManualExecutions": True}, "pinData": {}}
-(here.parent / "jarvis-ceo-v1-multi-ai.json").write_text(json.dumps(wf2, indent=2) + "\n")
-print("wrote jarvis-ceo-v1-multi-ai.json")
+def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme):
+    n = [
+      node("b1", "Start (manual test)", "n8n-nodes-base.manualTrigger", 1, [0, 400], {}),
+      node("b2", "Owner request", "n8n-nodes-base.code", 2, [200, 400], {"jsCode": code("1-owner-request.js")}),
+      node("b3", "Router (multi-AI)", "n8n-nodes-base.code", 2, [400, 400], {"jsCode": code(router_file)}),
+      node("b9", "Parse, cost & log", "n8n-nodes-base.code", 2, [1500, 100], {"jsCode": code("gateway-parse.js")}),
+      node("b10", "All AIs unavailable: ask owner", "n8n-nodes-base.code", 2, [1500, 1100], {"jsCode":
+          "// No AI could answer (not set up, free limits used, budget reached, or all errored).\n"
+          "// Phase 2 sends this to the owner on Telegram.\n"
+          "const r = $('Router (multi-AI)').first().json;\n"
+          "return [{ json: { task_id: r.task_id, status: 'blocked_no_ai', skipped: r.skipped,\n"
+          "  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"}),
+      node("b11", "README", "n8n-nodes-base.stickyNote", 1, [-40, -160], {"width": 1300, "height": 240, "content": readme}),
+    ]
+    c = {
+      "Start (manual test)": {"main": [[{"node": "Owner request", "type": "main", "index": 0}]]},
+      "Owner request": {"main": [[{"node": "Router (multi-AI)", "type": "main", "index": 0}]]},
+      "Router (multi-AI)": {"main": [[{"node": f"Use {labels[order[0]]}?", "type": "main", "index": 0}]]},
+    }
+    for i, p in enumerate(order):
+        y = 100 + i * 250
+        use, call, got = f"Use {labels[p]}?", f"Call {labels[p]}", f"Got {p}"
+        nxt = f"Use {labels[order[i+1]]}?" if i + 1 < len(order) else "All AIs unavailable: ask owner"
+        n.append(node(f"u{i}", use, "n8n-nodes-base.if", 2.2, [650, y], {
+            "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
+                           "conditions": [{"id": f"u{i}c", "leftValue": "={{ !!" + R + ".calls." + p + " }}", "rightValue": "",
+                                           "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                           "combinator": "and"}, "options": {}}))
+        params = {"method": "POST", "url": "={{ " + R + ".calls." + p + ".url }}",
+                  "sendBody": True, "specifyBody": "json",
+                  "jsonBody": "={{ JSON.stringify(" + R + ".calls." + p + ".body) }}",
+                  "options": {"timeout": 90000}}
+        params.update(auth(p))
+        n.append(node(f"h{i}", call, "n8n-nodes-base.httpRequest", 4.2, [900, y], params,
+                      retryOnFail=True, maxTries=2, waitBetweenTries=3000, onError="continueErrorOutput"))
+        n.append(node(f"g{i}", got, "n8n-nodes-base.set", 3.4, [1150, y], {
+            "mode": "manual", "includeOtherFields": True, "options": {},
+            "assignments": {"assignments": [{"id": f"g{i}a", "name": "_provider", "value": p, "type": "string"}]}}))
+        c[use] = {"main": [[{"node": call, "type": "main", "index": 0}], [{"node": nxt, "type": "main", "index": 0}]]}
+        c[call] = {"main": [[{"node": got, "type": "main", "index": 0}], [{"node": nxt, "type": "main", "index": 0}]]}
+        c[got] = {"main": [[{"node": "Parse, cost & log", "type": "main", "index": 0}]]}
+    wf = {"name": wf_name, "nodes": n, "connections": c,
+          "settings": {"executionOrder": "v1", "saveManualExecutions": True}, "pinData": {}}
+    (here.parent / file_name).write_text(json.dumps(wf, indent=2) + "\n")
+    print("wrote", file_name)
+
+HEADER = {"authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth"}
+OPENAI = {"authentication": "predefinedCredentialType", "nodeCredentialType": "openAiApi"}
+
+# v1: direct providers (no extra software)
+chain_workflow("JARVIS CEO v1 (multi-AI)", "jarvis-ceo-v1-multi-ai.json", "gateway-router.js",
+    ["gemini", "groq", "openrouter", "openai"],
+    {"gemini": "Gemini (free)", "groq": "Groq (free)", "openrouter": "OpenRouter (free)", "openai": "OpenAI (paid)"},
+    lambda p: OPENAI if p == "openai" else HEADER,
+    "## JARVIS CEO v1 - multi-AI (free first, paid last)\n"
+    "Tries Gemini -> Groq -> OpenRouter -> OpenAI. Moves to the next only if one fails or is over its free limit / your budget.\n"
+    "Setup: in each **Call** node pick a credential. Gemini/Groq/OpenRouter: *Header Auth*, Name `Authorization`, Value `Bearer <your key>`. OpenAI: your OpenAI credential.\n"
+    "A provider without a key: set `enabled: false` for it in the Router code. OpenRouter starts disabled until you choose a free model.\n"
+    "Tasks with `contains_personal_data: true` never go to free tiers.")
+
+# v2: through OmniRoute (provider fallback happens inside OmniRoute combos)
+chain_workflow("JARVIS CEO v2 (OmniRoute)", "jarvis-ceo-v2-omniroute.json", "omniroute-router.js",
+    ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
+    lambda p: HEADER,
+    "## JARVIS CEO v2 - through OmniRoute\n"
+    "Free combo `jarvis-free` first (OmniRoute switches between Gemini/Groq/OpenRouter inside it), paid combo `jarvis-paid` only if free fails, for T3 decisions, or for personal data - and only within your budget.\n"
+    "Setup: create a *Header Auth* credential \"OmniRoute\": Name `Authorization`, Value `Bearer <OmniRoute API key>` and select it in both **Call** nodes.\n"
+    "Needs `07-setup-omniroute.ps1` and the two combos created in the OmniRoute dashboard.")

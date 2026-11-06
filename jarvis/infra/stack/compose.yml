@@ -20,6 +20,7 @@
 #   docker compose up -d                       sandbox only (Path A)
 #   docker compose --profile search up -d      + SearXNG web search
 #   docker compose --profile n8n up -d         + n8n managed here (Path B)
+#   docker compose --profile omniroute up -d   + OmniRoute AI gateway (multi-AI, free tiers first)
 #   docker compose stop                        free the RAM when not building
 
 name: jarvis
@@ -30,6 +31,8 @@ networks:
 
 volumes:
   sandbox-tls:
+  omniroute-data:
+  omniroute-redis:
   n8n_data:
     external: true   # your existing data volume; must already exist
     name: n8n_data
@@ -141,5 +144,53 @@ services:
     env_file: n8n.env
     volumes:
       - n8n_data:/home/node/.n8n
+    mem_limit: 1536m
+    networks: [jarvis-net]
+
+  # ── OmniRoute: one AI endpoint for JARVIS, many providers, automatic fallback ──
+  # https://github.com/diegosouzapw/OmniRoute (MIT). Pinned version, loopback only,
+  # API key required. n8n reaches it as http://omniroute:20128/v1 on jarvis-net.
+  # RULE: connect providers with official API keys only. Never log in with
+  # subscription accounts (Claude Code, Codex, Copilot, Cursor, Kiro, Antigravity, "web" providers):
+  # their terms forbid this use and the accounts can be banned.
+  omniroute-redis:
+    profiles: [omniroute]
+    image: docker.io/library/redis:8.6.5-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 64mb --maxmemory-policy allkeys-lru
+    volumes:
+      - omniroute-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+    networks: [jarvis-net]
+
+  omniroute:
+    profiles: [omniroute]
+    image: docker.io/diegosouzapw/omniroute:${OMNIROUTE_VERSION:-3.8.53}
+    container_name: omniroute
+    restart: unless-stopped
+    stop_grace_period: 40s
+    depends_on:
+      omniroute-redis:
+        condition: service_healthy
+    env_file: omniroute.env
+    environment:
+      DATA_DIR: /app/data
+      REDIS_URL: redis://omniroute-redis:6379
+      OMNIROUTE_MEMORY_MB: '1024'
+    ports:
+      - '127.0.0.1:20128:20128'   # dashboard + /v1 API, this computer only
+    volumes:
+      - omniroute-data:/app/data
+    healthcheck:
+      test: ['CMD', 'node', 'healthcheck.mjs']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     mem_limit: 1536m
     networks: [jarvis-net]

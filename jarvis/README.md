@@ -27,6 +27,8 @@ install and does not start over.
 - `infra/stack/compose.yml`: the n8n sandbox stack, adapted from n8n's official compose file
 - `config/*.json`: model routing tiers, budget caps, approval rules
 - `workflows/jarvis-ceo-v0.json`: the first JARVIS agent (dispatcher), with routing and a budget guard.
+- `infra/windows/07-setup-omniroute.ps1` + OmniRoute in `compose.yml`: AI gateway with automatic fallback
+- `workflows/jarvis-ceo-v2-omniroute.json`: JARVIS through OmniRoute (free combo first, paid combo within budget)
 - `workflows/jarvis-ceo-v1-multi-ai.json`: the same agent using free AIs first (Gemini, Groq, OpenRouter) and paid OpenAI last. The logic was tested offline; the workflow has not run against OpenAI yet.
 
 **Not verified yet:** your earlier backup command. If it worked, there is an
@@ -139,6 +141,36 @@ It uses the **same** `n8n_data` volume, refuses version downgrades, needs a back
 the last 2 hours, asks you to type `MIGRATE`, and rolls back automatically if
 the new container does not answer. Do this **before** applying
 `infra\windows\wslconfig.example`, because applying it needs `wsl --shutdown`.
+
+### 8. OmniRoute: one AI gateway, so JARVIS doesn't run out of credit
+
+[OmniRoute](https://github.com/diegosouzapw/OmniRoute) (open source, MIT) holds all your AI keys and
+switches to another AI automatically when one is down or out of free requests. JARVIS sends
+every AI request to it.
+
+1. Start it. It stops the Assistant sandbox to free memory:
+   ```powershell
+   cd $HOME\jarvis-repo\jarvis
+   powershell -ExecutionPolicy Bypass -File .\infra\windows\07-setup-omniroute.ps1
+   ```
+2. Open **http://localhost:20128** and create the dashboard password. If it asks for a bootstrap
+   token, run `docker logs omniroute 2>&1 | findstr BOOTSTRAP` and paste the token it shows.
+3. **Providers:** add your **API keys** for Gemini (aistudio.google.com) and Groq
+   (console.groq.com), both free. Add OpenRouter if you have a key, then OpenAI.
+   **Never** connect Claude Code, Codex, Copilot, Cursor, Kiro, Antigravity or any "web"/login provider.
+   Those reuse personal subscriptions, which breaks their terms and can get your accounts banned.
+4. **Combos:** create two combos with exactly these names:
+   - `jarvis-free`: free models only (Gemini Flash / Flash-Lite, Groq gpt-oss, OpenRouter `:free` models)
+   - `jarvis-paid`: OpenAI (for example gpt-5-mini, then gpt-5)
+5. **Endpoints / API keys:** create an OmniRoute key for n8n. In n8n, add a **Header Auth** credential
+   named "OmniRoute": Name `Authorization`, Value `Bearer ` + that key.
+6. Import `workflows\jarvis-ceo-v2-omniroute.json`. Select the "OmniRoute" credential in both **Call** nodes
+   and click **Execute workflow**. Expected: `answered_by: free`, `cost_cad: 0`.
+
+Paid OpenAI is used only for important decisions (T3), for tasks with customer personal data, or when
+every free AI fails. Even then it stays inside your budget caps.
+Memory: OmniRoute uses up to 1.5 GB. To use the n8n Assistant, stop OmniRoute first
+(`docker compose --profile omniroute stop`) and start the sandbox (`docker compose up -d`).
 
 ### Everyday commands (from `jarvis\infra\stack`)
 

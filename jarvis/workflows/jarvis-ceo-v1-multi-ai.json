@@ -61,7 +61,7 @@
         1100
       ],
       "parameters": {
-        "jsCode": "// No provider could answer (not set up, free limits used, budget reached, or all errored).\n// Phase 2 sends this to the owner on Telegram.\nconst r = $('Router (multi-AI)').first().json;\nreturn [{ json: { task_id: r.task_id, status: 'blocked_no_ai', skipped: r.skipped,\n  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"
+        "jsCode": "// No AI could answer (not set up, free limits used, budget reached, or all errored).\n// Phase 2 sends this to the owner on Telegram.\nconst r = $('Router (multi-AI)').first().json;\nreturn [{ json: { task_id: r.task_id, status: 'blocked_no_ai', skipped: r.skipped,\n  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"
       }
     },
     {
@@ -129,7 +129,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.gemini.body) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 90000
         },
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -214,7 +214,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.groq.body) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 90000
         },
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -299,7 +299,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.openrouter.body) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 90000
         },
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -384,7 +384,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.openai.body) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 90000
         },
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "openAiApi"

@@ -78,6 +78,12 @@ improving the content.
 | T2 | research synthesis, copy, scripts, comparisons | Gemini Flash (free) → Groq gpt-oss-120b (free) → OpenRouter free model → OpenAI gpt-5-mini |
 | T3 | financial evaluation, strategy, independent review | OpenAI gpt-5 only (paid). A second paid provider can be added later |
 
+**Gateway (owner decision 2026-11-06): OmniRoute.** n8n sends every AI request to OmniRoute
+(`http://omniroute:20128/v1`) with a combo name: `jarvis-free` for T1/T2, `jarvis-paid` for T3 and personal data.
+OmniRoute does the per-provider fallback and quota tracking; n8n keeps the budget caps and the approval rules.
+Only official API keys are connected, never subscription logins. The direct chain (`jarvis-ceo-v1`) stays as a
+backup that works if OmniRoute is down.
+
 Free tiers have daily request limits, and they may use the data you send for training. The router counts calls per provider per day,
 skips a provider whose free limit is used up, and never sends tasks marked `contains_personal_data` to a free tier.
 Most routine work should therefore cost nothing, and OpenAI credit is spent mainly on T3 decisions.

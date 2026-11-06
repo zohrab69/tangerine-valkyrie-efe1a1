@@ -36,7 +36,7 @@ $apiPath    = Join-Path $StackDir 'sandbox-api.env'
 $runnerPath = Join-Path $StackDir 'sandbox-runner.env'
 $n8nPath    = Join-Path $StackDir 'n8n.env'
 
-if (Test-Path $apiPath) {
+if ((Test-Path $apiPath) -and (Read-EnvValue $apiPath 'SANDBOX_API_KEYS')) {
     Write-Ok 'sandbox-api.env already exists - keeping existing secrets'
     $apiKey = Read-EnvValue $apiPath 'SANDBOX_API_KEYS'
 } else {
@@ -57,7 +57,7 @@ if (-not (Test-Path $envPath)) {
     Set-EnvValue $envPath 'SEARXNG_SECRET' (New-Secret)
     Write-Ok 'Created .env'
 }
-if (-not (Test-Path $n8nPath)) {
+if (-not (Test-Path $n8nPath) -or -not (Read-EnvValue $n8nPath 'N8N_SANDBOX_SERVICE_API_KEY')) {
     Copy-Item (Join-Path $StackDir 'n8n.env.example') $n8nPath
     Set-EnvValue $n8nPath 'N8N_SANDBOX_SERVICE_API_KEY' $apiKey
     Write-Ok 'Created n8n.env (used only if you later do Path B)'
