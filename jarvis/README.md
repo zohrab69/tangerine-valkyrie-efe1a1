@@ -8,6 +8,7 @@ install and does not start over.
 | Document | What's in it |
 |---|---|
 | **This file** | Status and the exact next steps (Phase 1) |
+| [docs/BUSINESS-BRIEF.md](docs/BUSINESS-BRIEF.md) | **Your current goals and decisions: read first** |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Org chart, how agents talk, model routing, approvals, data, security |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases 1-10 with done/next checklists |
 | [docs/REALITY-CHECK.md](docs/REALITY-CHECK.md) | What can and cannot be automated, platform rules, Canadian/Quebec law, real costs |

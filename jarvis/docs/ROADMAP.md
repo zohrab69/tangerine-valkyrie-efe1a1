@@ -1,5 +1,9 @@
 # Roadmap
 
+**Order updated 2026-11-06** (see BUSINESS-BRIEF.md): after Phase 1-2, VeraClean (Phase 7)
+moves up to come next, then the cloud server (Phase 9), then Shopify (Phases 3-6).
+The numbers are kept so earlier references still work.
+
 Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your laptop · `[ ]` planned
 
 ## Phase 1: Infrastructure (current)
@@ -47,7 +51,10 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Apply early for YouTube API audit, TikTok Content Posting API and Instagram Graph API
 - [ ] Until approved: JARVIS prepares, you tap post. Metrics are imported back
 
-## Phase 7: VeraClean
+## Phase 7: VeraClean (now next after Phase 2)
+- [ ] SEAO tender watcher: weekly JSON, filter cleaning keywords and Montréal/Laval, Telegram digest
+- [ ] Prospect list builder (Google Places): hotels, motels, clinics (not hospitals), offices, property managers
+- [ ] Read saved-search alert emails (Kijiji/Indeed/Facebook) into the leads table
 - [ ] Price sheet and rules (your approval), French-first templates
 - [ ] Lead research with CASL consent basis per contact; outreach after approval of each list
 - [ ] Inquiry intake → quote draft → Google Calendar booking → confirmations and reminders
