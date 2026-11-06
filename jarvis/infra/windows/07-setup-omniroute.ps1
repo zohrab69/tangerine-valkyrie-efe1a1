@@ -10,8 +10,9 @@
 # Does NOT touch n8n_data or restart n8n.
 #   powershell -ExecutionPolicy Bypass -File .\infra\windows\07-setup-omniroute.ps1
 #   (add -KeepSandbox to leave the sandbox running if you have enough free RAM)
+#   (add -MinFreeGb 1.0 to start with less free RAM, accepting a slower laptop)
 
-param([switch]$KeepSandbox)
+param([switch]$KeepSandbox, [double]$MinFreeGb = 1.5)
 
 . (Join-Path $PSScriptRoot '_common.ps1')
 Assert-Docker
@@ -45,7 +46,8 @@ if (-not $KeepSandbox) {
 $os = Get-CimInstance Win32_OperatingSystem
 $freeGb = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
 Write-Ok "Free Windows RAM: $freeGb GB"
-if ($freeGb -lt 1.5) { throw 'Less than 1.5 GB free. Close browser tabs/apps and run again.' }
+if ($freeGb -lt $MinFreeGb) { throw "Less than $MinFreeGb GB free. Close browser tabs/apps and run again (or accept a slower laptop with: -MinFreeGb 1.0)." }
+if ($freeGb -lt 1.5) { Write-Warn2 'Low memory: the laptop may be slow while OmniRoute runs. Windows will use the page file; your data is not at risk.' }
 
 Write-Step 'Starting OmniRoute (first time downloads ~250-550 MB)'
 Invoke-Compose @('--profile', 'omniroute', 'up', '-d', 'omniroute-redis', 'omniroute')
