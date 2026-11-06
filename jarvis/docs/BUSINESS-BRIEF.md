@@ -1,4 +1,4 @@
-# Owner brief (updated 2026-11-06)
+# Owner brief (updated 2026-11-06: Shopify + Amazon first)
 
 Read this first in every session. It is the owner's current intent, in plain words.
 
@@ -22,7 +22,10 @@ Trading stays paused.
 - Build it **step by step**. The owner has only Docker Desktop and n8n so far and is open to better tools.
 
 ## Decisions taken
-- **Order:** VeraClean first, because it has no stock risk and the fastest path to the first revenue. Shopify second.
+- **Order (owner decision, 2026-11-06, replaces "VeraClean first"):** **Shopify + Amazon first**, VeraClean second.
+  Shopify Canada launches first. Amazon.ca runs in parallel as research and account
+  registration (approval takes time), and selling there starts only with products and suppliers
+  that meet Amazon's dropshipping rules (seller of record, blind shipping, fast delivery).
 - **Backbone:** keep **n8n**, which is free, already installed, and has the integrations needed. Use separate services only
   where n8n cannot do the job alone: phone calls, video rendering, social APIs.
 - **24/7 means a cloud server.** The laptop is for building. Move to a small VPS (about CA$10/month)

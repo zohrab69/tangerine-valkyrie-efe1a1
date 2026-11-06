@@ -4,7 +4,7 @@ This repo holds the owner's JARVIS project (AI COO running their businesses) und
 `text.txt` is an unrelated website (Groupe Ararat Construction): leave it unchanged.
 
 Before working on JARVIS, read in this order:
-1. `jarvis/docs/BUSINESS-BRIEF.md`: current owner intent and decisions (VeraClean first, then Shopify)
+1. `jarvis/docs/BUSINESS-BRIEF.md`: current owner intent and decisions (Shopify + Amazon first, then VeraClean)
 2. `jarvis/docs/ROADMAP.md`: what is done, built-but-untested, and planned
 3. `jarvis/README.md`: the Phase 1 setup steps on the owner's Windows laptop
 

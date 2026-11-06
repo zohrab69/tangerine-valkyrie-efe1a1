@@ -1,8 +1,8 @@
 # Roadmap
 
-**Order updated 2026-11-06** (see BUSINESS-BRIEF.md): after Phase 1-2, VeraClean (Phase 7)
-moves up to come next, then the cloud server (Phase 9), then Shopify (Phases 3-6).
-The numbers are kept so earlier references still work.
+**Current order (owner decision 2026-11-06):** Phase 1 → 2 → 3 (product research) → 4 (Shopify)
+→ 6 (videos) → 5 (Amazon, in parallel from Phase 3 as registration + policy research) → 9 (cloud,
+before the store goes live) → 7 (VeraClean) → 8 → 10. The numbers are kept so earlier references still work.
 
 Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your laptop · `[ ]` planned
 
@@ -30,7 +30,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Finance 1 unit-economics calculator (code, no AI) with unit tests
 - [ ] Second provider key (Anthropic or OpenRouter) for fallback and independent review, when budget allows
 
-## Phase 3: First real product research
+## Phase 3: First real product research (NEXT after Phase 2)
 - [ ] Choose data sources: supplier APIs (CJ / AliExpress dropshipping), TikTok Creative Center and Google Trends exports (manual weekly CSV)
 - [ ] Shortlist of 3-5 Canadian products with sources, landed cost, fees, tax and shipping time, all marked as estimates
 - [ ] Owner review: approve or reject, logged
@@ -42,7 +42,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Order and tracking workflows, support templates
 - [ ] Move n8n to a VPS (webhooks need a public URL), see Phase 9
 
-## Phase 5: Amazon.ca
+## Phase 5: Amazon.ca (research and registration start in parallel with Phase 3)
+- [ ] Amazon.ca seller registration (identity checks can take weeks: start early)
 - [ ] Policy check per product (seller of record, blind shipping, delivery speed)
 - [ ] Professional plan and SP-API developer registration, only when a product qualifies
 
@@ -51,7 +52,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Apply early for YouTube API audit, TikTok Content Posting API and Instagram Graph API
 - [ ] Until approved: JARVIS prepares, you tap post. Metrics are imported back
 
-## Phase 7: VeraClean (now next after Phase 2)
+## Phase 7: VeraClean (after Shopify is live)
 - [ ] SEAO tender watcher: weekly JSON, filter cleaning keywords and Montréal/Laval, Telegram digest
 - [ ] Prospect list builder (Google Places): hotels, motels, clinics (not hospitals), offices, property managers
 - [ ] Read saved-search alert emails (Kijiji/Indeed/Facebook) into the leads table
