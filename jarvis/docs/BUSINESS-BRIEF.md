@@ -29,7 +29,7 @@ Trading stays paused.
 - **Backbone:** keep **n8n**, which is free, already installed, and has the integrations needed. Use separate services only
   where n8n cannot do the job alone: phone calls, video rendering, social APIs.
 - **24/7 means a cloud server.** The laptop is for building. Move to a small VPS (about CA$10/month)
-  as soon as the first VeraClean workflow works.
+  before the Shopify store goes live (store webhooks need a public address).
 
 ## Real lead sources for VeraClean (legitimate, mostly free)
 | Source | What it gives | Automation |
