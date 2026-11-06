@@ -51,7 +51,7 @@ function New-Secret {
 # Docker Compose env files must be UTF-8 WITHOUT a BOM and use LF line endings.
 # (Set-Content -Encoding utf8 in PowerShell 5.1 adds a BOM, which breaks them.)
 function Write-EnvFile {
-    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string[]]$Lines)
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][AllowEmptyString()][AllowEmptyCollection()][string[]]$Lines)
     $text = ($Lines -join "`n") + "`n"
     [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
 }

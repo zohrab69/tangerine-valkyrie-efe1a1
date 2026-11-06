@@ -18,18 +18,19 @@ Assert-Docker
 
 Write-Step 'Secrets'
 $orEnv = Join-Path $StackDir 'omniroute.env'
-if (Test-Path $orEnv) { Write-Ok 'omniroute.env already exists - keeping it' }
-else {
-    Copy-Item (Join-Path $StackDir 'omniroute.env.example') $orEnv
-    foreach ($k in 'JWT_SECRET', 'API_KEY_SECRET', 'STORAGE_ENCRYPTION_KEY') { Set-EnvValue $orEnv $k (New-Secret) }
-    Write-Ok 'Created omniroute.env (back it up with the rest of infra\stack: without STORAGE_ENCRYPTION_KEY saved provider keys cannot be read)'
+if (-not (Test-Path $orEnv)) { Copy-Item (Join-Path $StackDir 'omniroute.env.example') $orEnv }
+$made = 0
+foreach ($k in 'JWT_SECRET', 'API_KEY_SECRET', 'STORAGE_ENCRYPTION_KEY') {
+    $v = Read-EnvValue $orEnv $k
+    if (-not $v -or $v -eq 'generated') { Set-EnvValue $orEnv $k (New-Secret); $made++ }
 }
+if ($made -gt 0) { Write-Ok "Generated $made secret(s) in omniroute.env (back up infra\stack with your backups: without STORAGE_ENCRYPTION_KEY saved provider keys cannot be read)" }
+else { Write-Ok 'omniroute.env already has its secrets - keeping them' }
 # Compose needs these files to exist even for services that are not started.
 $envPath = Join-Path $StackDir '.env'
-if (-not (Test-Path $envPath)) {
-    Copy-Item (Join-Path $StackDir '.env.example') $envPath
-    Set-EnvValue $envPath 'SEARXNG_SECRET' (New-Secret)
-}
+if (-not (Test-Path $envPath)) { Copy-Item (Join-Path $StackDir '.env.example') $envPath }
+$sx = Read-EnvValue $envPath 'SEARXNG_SECRET'
+if (-not $sx -or $sx -eq 'generated-by-setup-script') { Set-EnvValue $envPath 'SEARXNG_SECRET' (New-Secret) }
 foreach ($f in 'sandbox-api.env', 'sandbox-runner.env', 'n8n.env') {
     $p = Join-Path $StackDir $f
     if (-not (Test-Path $p)) { Write-EnvFile $p @('# placeholder; 03-setup-sandbox.ps1 fills this in') }

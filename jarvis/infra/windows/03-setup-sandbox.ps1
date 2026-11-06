@@ -52,11 +52,9 @@ if ((Test-Path $apiPath) -and (Read-EnvValue $apiPath 'SANDBOX_API_KEYS')) {
         "SANDBOX_RUNNER_API_KEYS=$runnerKey")
     Write-Ok 'Created sandbox-api.env and sandbox-runner.env'
 }
-if (-not (Test-Path $envPath)) {
-    Copy-Item (Join-Path $StackDir '.env.example') $envPath
-    Set-EnvValue $envPath 'SEARXNG_SECRET' (New-Secret)
-    Write-Ok 'Created .env'
-}
+if (-not (Test-Path $envPath)) { Copy-Item (Join-Path $StackDir '.env.example') $envPath; Write-Ok 'Created .env' }
+$sx = Read-EnvValue $envPath 'SEARXNG_SECRET'
+if (-not $sx -or $sx -eq 'generated-by-setup-script') { Set-EnvValue $envPath 'SEARXNG_SECRET' (New-Secret) }
 if (-not (Test-Path $n8nPath) -or -not (Read-EnvValue $n8nPath 'N8N_SANDBOX_SERVICE_API_KEY')) {
     Copy-Item (Join-Path $StackDir 'n8n.env.example') $n8nPath
     Set-EnvValue $n8nPath 'N8N_SANDBOX_SERVICE_API_KEY' $apiKey
