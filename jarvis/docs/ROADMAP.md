@@ -10,7 +10,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] Docker Desktop, WSL 2, Compose, n8n on :5678, volume `n8n_data`, owner account *(as you reported it)*
 - [x] OpenAI API key, US$10 credit, auto-recharge off *(as you reported it)*
 - [x] Inspect container: `01-inspect.ps1` ran 2026-11-06. Container `n8n`, n8n 2.45.7, restart unless-stopped (no `--rm`), encryption key inside the volume, Docker limit 3.7 GB, Windows RAM at 90%
-- [~] Verified backup with restore test: `02-backup.ps1`
+- [x] Verified backup with restore test: `02-backup.ps1`. Ran 2026-11-06: n8n_data-20261106-150713.tar.gz, integrity ok, 0 workflows, 1 credential, 1 user
 - [~] Sandbox stack: `03-setup-sandbox.ps1` + `infra/stack/compose.yml`
 - [~] Connect n8n to the sandbox: `04-connect-n8n.ps1` and the Service URL/API key in the n8n UI
 - [~] First agent: `workflows/jarvis-ceo-v0.json` (dispatcher, router, budget guard)
