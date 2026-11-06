@@ -1,0 +1,116 @@
+# JARVIS cloud server stack (Hetzner CX23/CX33, Ubuntu 24.04).
+# Public: only Caddy (80/443) -> n8n over HTTPS.
+# Private: OmniRoute dashboard on 127.0.0.1:20128 (reach it through an SSH tunnel), Postgres, Redis.
+# Managed by setup.sh; secrets live in /opt/jarvis/.env (never commit).
+
+name: jarvis
+
+networks:
+  jarvis-net:
+    name: jarvis-net
+
+volumes:
+  n8n_data:
+  pg_data:
+  caddy_data:
+  caddy_config:
+  omniroute-data:
+  omniroute-redis:
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443']
+    environment:
+      N8N_HOST: ${N8N_HOST:?}
+    command: caddy reverse-proxy --from ${N8N_HOST} --to n8n:5678
+    volumes: [caddy_data:/data, caddy_config:/config]
+    mem_limit: 128m
+    networks: [jarvis-net]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: n8n
+    volumes: [pg_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U n8n -d n8n']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 384m
+    networks: [jarvis-net]
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:?}
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?}
+      N8N_HOST: ${N8N_HOST}
+      N8N_PROTOCOL: https
+      N8N_PORT: '5678'
+      WEBHOOK_URL: https://${N8N_HOST}/
+      N8N_PROXY_HOPS: '1'
+      GENERIC_TIMEZONE: America/Toronto
+      TZ: America/Toronto
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      EXECUTIONS_DATA_PRUNE: 'true'
+      EXECUTIONS_DATA_MAX_AGE: '336'
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: '10000'
+    volumes: [n8n_data:/home/node/.n8n]
+    mem_limit: 1g
+    networks: [jarvis-net]
+
+  omniroute-redis:
+    image: redis:8.6.5-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 64mb --maxmemory-policy allkeys-lru
+    volumes: [omniroute-redis:/data]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+    networks: [jarvis-net]
+
+  omniroute:
+    # https://github.com/diegosouzapw/OmniRoute (MIT). Pinned. API keys only: never connect
+    # subscription logins (Claude Code, Codex, Copilot, Cursor, Kiro, Antigravity, "web" providers).
+    image: diegosouzapw/omniroute:${OMNIROUTE_VERSION:-3.8.53}
+    container_name: omniroute
+    restart: unless-stopped
+    stop_grace_period: 40s
+    depends_on:
+      omniroute-redis: { condition: service_healthy }
+    environment:
+      DATA_DIR: /app/data
+      REDIS_URL: redis://omniroute-redis:6379
+      OMNIROUTE_MEMORY_MB: '1024'
+      JWT_SECRET: ${OR_JWT_SECRET:?}
+      API_KEY_SECRET: ${OR_API_KEY_SECRET:?}
+      STORAGE_ENCRYPTION_KEY: ${OR_STORAGE_ENCRYPTION_KEY:?}
+      STORAGE_ENCRYPTION_KEY_VERSION: v1
+      REQUIRE_API_KEY: 'true'
+      ALLOW_API_KEY_REVEAL: 'false'
+      NODE_ENV: production
+      PORT: '20128'
+      BASE_URL: http://localhost:20128
+      NEXT_PUBLIC_BASE_URL: http://localhost:20128
+      AUTH_COOKIE_SECURE: 'false'
+      INSPECTOR_MASK_SECRETS: 'true'
+    ports: ['127.0.0.1:20128:20128']   # NOT public. Open with: ssh -L 20128:localhost:20128 root@SERVER
+    volumes: [omniroute-data:/app/data]
+    mem_limit: 1536m
+    networks: [jarvis-net]

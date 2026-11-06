@@ -68,7 +68,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Niche research (3 candidates), 2-week test of 10 videos each, then pick by retention and subscribers
 - [ ] Original research and scripts, AI disclosure where required
 
-## Phase 9: Cloud
+## Phase 9: Cloud (started 2026-11-06: owner chose to move now)
+- [~] Server files: `infra/server/` (Hetzner CX23, Caddy HTTPS via sslip.io, n8n + Postgres, OmniRoute private, firewall, swap, daily backups)
 - [ ] VPS (~CA$10/month) with n8n + Postgres, Caddy HTTPS, daily off-site backups
 - [ ] Daytona for the Assistant sandbox, or keep it on the laptop
 

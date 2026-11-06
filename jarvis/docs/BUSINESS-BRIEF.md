@@ -31,6 +31,7 @@ Trading stays paused.
   This is separate from the AI cap in `config/budget.json`.
 - **Backbone:** keep **n8n**, which is free, already installed, and has the integrations needed. Use separate services only
   where n8n cannot do the job alone: phone calls, video rendering, social APIs.
+- **Cloud server now (owner decision 2026-11-06):** Hetzner CX23 (about €6/month), set up from `infra/server/`. The laptop is too short on RAM for OmniRoute.
 - **24/7 means a cloud server.** The laptop is for building. Move to a small VPS (about CA$10/month)
   before the Shopify store goes live (store webhooks need a public address).
 
