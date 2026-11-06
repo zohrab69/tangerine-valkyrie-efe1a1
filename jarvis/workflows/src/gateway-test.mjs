@@ -1,0 +1,20 @@
+import fs from 'fs';
+const run = (file, ctx) => new Function('$input', '$', '$getWorkflowStaticData', fs.readFileSync(file, 'utf8'))(ctx.input, ctx.$, ctx.sd);
+const store = {}; const sd = () => store;
+const [task] = run('1-owner-request.js', { sd });
+const route = t => run('gateway-router.js', { input: { first: () => t }, sd })[0];
+let r = route(task);
+console.log('T1 order', r.json.order, 'skipped', r.json.skipped);
+const fake = { _provider: 'gemini', model: 'gemini-2.5-flash-lite', usage: { prompt_tokens: 300, completion_tokens: 200 },
+  choices: [{ message: { content: '```json\n{"department":"ecommerce"}\n```' } }] };
+const [p] = run('gateway-parse.js', { input: { first: () => ({ json: fake }) }, $: () => ({ first: () => r }), sd });
+console.log('parsed', p.json.answered_by, p.json.decision, p.json.cost_cad, p.json.ledger_after.calls);
+const pd = route({ json: { ...task.json, contains_personal_data: true } });
+console.log('personal data order', pd.json.order);
+store.ledger.calls.gemini = 900; store.ledger.calls.groq = 900;
+console.log('free limits used', route(task).json.order);
+store.ledger.day_cad = 1.9999;
+const none = route(task);
+console.log('all blocked', none.json.any_available, none.json.skipped);
+store.ledger.day_cad = 0;
+console.log('T3', route({ json: { ...task.json, task_type: 'strategy' } }).json.order);

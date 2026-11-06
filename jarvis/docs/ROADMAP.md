@@ -14,6 +14,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [~] Sandbox stack: `03-setup-sandbox.ps1` + `infra/stack/compose.yml`
 - [~] Connect n8n to the sandbox: `04-connect-n8n.ps1` and the Service URL/API key in the n8n UI
 - [~] First agent: `workflows/jarvis-ceo-v0.json` (dispatcher, router, budget guard)
+- [~] Multi-AI version: `workflows/jarvis-ceo-v1-multi-ai.json` (Gemini/Groq free first, OpenAI last; logic tested offline)
+- [ ] Free API keys: Gemini (AI Studio), Groq; optional OpenRouter
 - [~] Health check: `05-verify.ps1`
 - [ ] OpenAI dashboard: monthly budget, alerts, separate "jarvis" project key
 - [ ] Optional Path B: `06-migrate-n8n-to-compose.ps1` (not needed now: the container already restarts by itself)

@@ -72,11 +72,15 @@ improving the content.
 
 ## 4. Model routing (`config/model-routing.json`)
 
-| Tier | Use | Start with (OpenAI) | Later options |
-|---|---|---|---|
-| T1 | classify, extract, format, short replies | gpt-5-nano | cheap models through OpenRouter |
-| T2 | research synthesis, copy, scripts, comparisons | gpt-5-mini | Claude Haiku, Gemini Flash |
-| T3 | financial evaluation, strategy, independent review | gpt-5 | Claude Sonnet, as the second opinion |
+| Tier | Use | Tried in order |
+|---|---|---|
+| T1 | classify, extract, format, short replies | Gemini Flash-Lite (free) → Groq gpt-oss-20b (free) → OpenRouter free model → OpenAI gpt-5-nano |
+| T2 | research synthesis, copy, scripts, comparisons | Gemini Flash (free) → Groq gpt-oss-120b (free) → OpenRouter free model → OpenAI gpt-5-mini |
+| T3 | financial evaluation, strategy, independent review | OpenAI gpt-5 only (paid). A second paid provider can be added later |
+
+Free tiers have daily request limits, and they may use the data you send for training. The router counts calls per provider per day,
+skips a provider whose free limit is used up, and never sends tasks marked `contains_personal_data` to a free tier.
+Most routine work should therefore cost nothing, and OpenAI credit is spent mainly on T3 decisions.
 
 Rules: unknown tasks go to T2 and never to T3. A task escalates at most once, and only when the cheaper output fails
 validation. The router moves to the next provider only on 429, 5xx or timeout, reusing the same `task_id` and

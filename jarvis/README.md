@@ -26,7 +26,8 @@ install and does not start over.
 - Scripts `infra/windows/01`…`06`: inspect, verified backup + restore test, sandbox, connect, verify, optional migration
 - `infra/stack/compose.yml`: the n8n sandbox stack, adapted from n8n's official compose file
 - `config/*.json`: model routing tiers, budget caps, approval rules
-- `workflows/jarvis-ceo-v0.json`: the first JARVIS agent (dispatcher), with routing and a budget guard. The logic was tested offline; the workflow has not run against OpenAI yet.
+- `workflows/jarvis-ceo-v0.json`: the first JARVIS agent (dispatcher), with routing and a budget guard.
+- `workflows/jarvis-ceo-v1-multi-ai.json`: the same agent using free AIs first (Gemini, Groq, OpenRouter) and paid OpenAI last. The logic was tested offline; the workflow has not run against OpenAI yet.
 
 **Not verified yet:** your earlier backup command. If it worked, there is an
 `n8n-backup.tar.gz` in the folder PowerShell was open in (usually
@@ -99,6 +100,21 @@ from inside n8n, and copies the sandbox API key to your clipboard. Then fill in 
 4. Click **Execute workflow**. The node **Parse, cost & log** should show a JSON work order (department,
    steps, needs_owner_approval) and a `cost_cad` of a fraction of a cent.
 5. In n8n Assistant, ask: *"Run a code snippet that prints 2+2"* to show the sandbox runs code.
+
+### 5b. Multi-AI version (free AIs first, so your OpenAI credit lasts)
+
+1. Get free keys. No card is needed:
+   - **Gemini:** aistudio.google.com > *Get API key*
+   - **Groq:** console.groq.com > *API Keys*
+2. In n8n, open **Credentials > Add credential > Header Auth** and create one per key:
+   Name `Authorization`, Value `Bearer ` followed by the key (there is a space after `Bearer`).
+   Call them "Gemini" and "Groq". Paste the keys only into n8n, never into chat.
+3. Import `workflows\jarvis-ceo-v1-multi-ai.json`. In each **Call ...** node, select the matching credential.
+4. Click **Execute workflow**. **Parse, cost & log** shows `answered_by` (it should be `gemini`) and `cost_cad: 0`.
+
+The workflow tries Gemini, then Groq, then OpenRouter (off until you choose a free model), then OpenAI.
+It moves to the next AI only when one fails or uses up its free daily limit. Free AIs may use what you send
+them to train their models, so tasks containing customer personal data go to OpenAI only.
 
 ### 6. Verify everything
 

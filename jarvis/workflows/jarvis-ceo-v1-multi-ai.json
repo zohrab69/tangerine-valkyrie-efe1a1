@@ -1,0 +1,651 @@
+{
+  "name": "JARVIS CEO v1 (multi-AI)",
+  "nodes": [
+    {
+      "id": "b1",
+      "name": "Start (manual test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b2",
+      "name": "Owner request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Owner request -> one task for JARVIS. Edit \"owner_message\" to test.\n// Later this node is replaced by a Telegram/email/chat trigger.\nconst owner_message = 'Find 3 product ideas we could sell in Canada for under 60 CAD, with reliable shipping.';\nreturn [{\n  json: {\n    task_id: 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),\n    created_at: new Date().toISOString(),\n    business: 'jarvis',\n    agent: 'jarvis_ceo_dispatcher',\n    task_type: 'classify',\n    owner_message,\n    instructions: [\n      'You are JARVIS, the AI CEO coordinating these departments:',\n      'ecommerce (Shopify + Amazon Canada: research, finance, listings, fulfillment),',\n      'marketing (product videos/posts for YouTube Shorts, TikTok, Instagram),',\n      'veraclean (cleaning company in Montreal/Laval: leads, outreach, booking, reports),',\n      'content_channel (independent YouTube/TikTok/Instagram channel),',\n      'trading (PAUSED: never assign work to it).',\n      'Turn the owner message into a work order. Reply with JSON only, with keys:',\n      'department, task_type, priority (low|normal|high), summary,',\n      'steps (array of max 5 short strings, each naming the agent role that does it),',\n      'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',\n      'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).'\n    ].join(' ')\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "b3",
+      "name": "Router (multi-AI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Multi-AI router: builds one ready-to-send request per available provider, free tiers first.\n// Keep ROUTING in sync with jarvis/config/model-routing.json and CAPS with jarvis/config/budget.json.\nconst ROUTING = {\n  usd_to_cad: 1.40,\n  providers: {\n    gemini:     { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', free: true,  enabled: true },\n    groq:       { url: 'https://api.groq.com/openai/v1/chat/completions',                          free: true,  enabled: true },\n    openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions',                            free: true,  enabled: false },\n    openai:     { url: 'https://api.openai.com/v1/chat/completions',                               free: false, enabled: true },\n  },\n  tiers: {\n    T1: { max_tokens: 800, chain: [\n      { provider: 'gemini', model: 'gemini-2.5-flash-lite', daily_limit: 900 },\n      { provider: 'groq', model: 'openai/gpt-oss-20b', daily_limit: 900 },\n      { provider: 'openrouter', model: 'CHOOSE-A-FREE-MODEL', daily_limit: 45 },\n      { provider: 'openai', model: 'gpt-5-nano', in: 0.05, out: 0.40 } ] },\n    T2: { max_tokens: 2000, chain: [\n      { provider: 'gemini', model: 'gemini-2.5-flash', daily_limit: 200 },\n      { provider: 'groq', model: 'openai/gpt-oss-120b', daily_limit: 900 },\n      { provider: 'openrouter', model: 'CHOOSE-A-FREE-MODEL', daily_limit: 45 },\n      { provider: 'openai', model: 'gpt-5-mini', in: 0.25, out: 2.00 } ] },\n    T3: { max_tokens: 4000, chain: [\n      { provider: 'openai', model: 'gpt-5', in: 1.25, out: 10.0 } ] },\n  },\n  task_types: {\n    classify: 'T1', extract: 'T1', format: 'T1', summarize_short: 'T1', customer_reply_draft: 'T1',\n    research_synthesis: 'T2', marketing_copy: 'T2', video_script: 'T2', competitor_comparison: 'T2',\n    lead_qualification: 'T2', daily_report: 'T2',\n    product_financials: 'T3', independent_review: 'T3', strategy: 'T3',\n  },\n};\nconst CAPS = { daily_cad: 2.00, monthly_cad: 40, single_call_cad: 0.25 };\nconst ORDER = ['gemini', 'groq', 'openrouter', 'openai']; // must match the node order in the workflow\n\nconst task = $input.first().json;\nconst tierName = ROUTING.task_types[task.task_type] || 'T2';\nconst tier = ROUTING.tiers[tierName];\n\nconst store = $getWorkflowStaticData('global');\nconst today = new Date().toISOString().slice(0, 10), month = today.slice(0, 7);\nstore.ledger = store.ledger || { day: today, month, day_cad: 0, month_cad: 0, calls: {} };\nif (store.ledger.day !== today) { store.ledger.day = today; store.ledger.day_cad = 0; store.ledger.calls = {}; }\nif (store.ledger.month !== month) { store.ledger.month = month; store.ledger.month_cad = 0; }\n\nconst messages = [\n  { role: 'system', content: task.instructions },\n  { role: 'user', content: task.owner_message },\n];\nconst inputTokens = Math.ceil((task.instructions.length + task.owner_message.length) / 4) + 50;\n\nconst calls = {}, skipped = [];\nfor (const step of tier.chain) {\n  const p = ROUTING.providers[step.provider];\n  const why =\n    !p.enabled ? 'not set up' :\n    step.model.startsWith('CHOOSE') ? 'no model chosen' :\n    (p.free && task.contains_personal_data) ? 'free tier not allowed for personal data' :\n    (step.daily_limit && (store.ledger.calls[step.provider] || 0) >= step.daily_limit) ? 'free daily limit used' : null;\n  let est_cad = 0;\n  if (!why && !p.free) {\n    est_cad = +(((inputTokens * step.in + tier.max_tokens * step.out) / 1e6) * ROUTING.usd_to_cad).toFixed(5);\n    if (est_cad > CAPS.single_call_cad) { skipped.push(`${step.provider}: call estimate over cap`); continue; }\n    if (store.ledger.day_cad + est_cad > CAPS.daily_cad) { skipped.push(`${step.provider}: daily budget reached`); continue; }\n    if (store.ledger.month_cad + est_cad > CAPS.monthly_cad) { skipped.push(`${step.provider}: monthly budget reached`); continue; }\n  }\n  if (why) { skipped.push(`${step.provider}: ${why}`); continue; }\n  const body = { model: step.model, messages, response_format: { type: 'json_object' } };\n  if (step.provider === 'openai') body.max_completion_tokens = tier.max_tokens;\n  else body.max_tokens = tier.max_tokens;\n  calls[step.provider] = { url: p.url, body, est_cad, price: { in: step.in || 0, out: step.out || 0 } };\n}\n\nreturn [{ json: { ...task, tier: tierName, order: ORDER.filter(n => calls[n]), calls, skipped,\n                  any_available: Object.keys(calls).length > 0 } }];\n"
+      }
+    },
+    {
+      "id": "b9",
+      "name": "Parse, cost & log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Parse whichever provider answered (OpenAI-compatible chat format), record cost and usage.\nconst routed = $('Router (multi-AI)').first().json;\nconst res = $input.first().json;\nconst provider = res._provider;\nconst call = routed.calls[provider];\n\nlet text = (res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || '';\ntext = text.replace(/^\\s*```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/, '');\nlet decision = null, parse_error = null;\ntry { decision = JSON.parse(text); } catch (e) { parse_error = 'Answer was not valid JSON: ' + e.message; }\n\nconst u = res.usage || {};\nconst inTok = u.prompt_tokens || 0, outTok = u.completion_tokens || 0;\nconst cost_cad = +(((inTok * call.price.in + outTok * call.price.out) / 1e6) * 1.40).toFixed(6);\n\nconst store = $getWorkflowStaticData('global');\nif (store.ledger) {\n  store.ledger.calls[provider] = (store.ledger.calls[provider] || 0) + 1;\n  store.ledger.day_cad += cost_cad; store.ledger.month_cad += cost_cad;\n}\nreturn [{ json: {\n  task_id: routed.task_id, answered_by: provider, model: res.model || call.body.model, tier: routed.tier,\n  decision, parse_error, usage: { input_tokens: inTok, output_tokens: outTok },\n  cost_cad, cost_note: provider === 'openai' ? 'Estimate from list prices.' : 'Free tier: no charge.',\n  skipped_before: routed.skipped, ledger_after: store.ledger || null, logged_at: new Date().toISOString(),\n} }];\n"
+      }
+    },
+    {
+      "id": "b10",
+      "name": "All AIs unavailable: ask owner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        1100
+      ],
+      "parameters": {
+        "jsCode": "// No provider could answer (not set up, free limits used, budget reached, or all errored).\n// Phase 2 sends this to the owner on Telegram.\nconst r = $('Router (multi-AI)').first().json;\nreturn [{ json: { task_id: r.task_id, status: 'blocked_no_ai', skipped: r.skipped,\n  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"
+      }
+    },
+    {
+      "id": "b11",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -160
+      ],
+      "parameters": {
+        "width": 1300,
+        "height": 240,
+        "content": "## JARVIS CEO v1 - multi-AI (free first, paid last)\nTries Gemini -> Groq -> OpenRouter -> OpenAI. Moves to the next only if one fails or is over its free limit / your budget.\nSetup: in each **Call** node pick a credential. Gemini/Groq/OpenRouter: *Header Auth*, Name `Authorization`, Value `Bearer <your key>`. OpenAI: your OpenAI credential.\nA provider without a key: set `enabled: false` for it in the Router code. OpenRouter starts disabled until you choose a free model.\nTasks with `contains_personal_data: true` never go to free tiers."
+      }
+    },
+    {
+      "id": "u0",
+      "name": "Use Gemini (free)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "u0c",
+              "leftValue": "={{ !!$('Router (multi-AI)').first().json.calls.gemini }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h0",
+      "name": "Call Gemini (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Router (multi-AI)').first().json.calls.gemini.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.gemini.body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "g0",
+      "name": "Got gemini",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1150,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g0a",
+              "name": "_provider",
+              "value": "gemini",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "u1",
+      "name": "Use Groq (free)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        350
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "u1c",
+              "leftValue": "={{ !!$('Router (multi-AI)').first().json.calls.groq }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h1",
+      "name": "Call Groq (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Router (multi-AI)').first().json.calls.groq.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.groq.body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "g1",
+      "name": "Got groq",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1150,
+        350
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1a",
+              "name": "_provider",
+              "value": "groq",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "u2",
+      "name": "Use OpenRouter (free)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "u2c",
+              "leftValue": "={{ !!$('Router (multi-AI)').first().json.calls.openrouter }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h2",
+      "name": "Call OpenRouter (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Router (multi-AI)').first().json.calls.openrouter.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.openrouter.body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "g2",
+      "name": "Got openrouter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1150,
+        600
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g2a",
+              "name": "_provider",
+              "value": "openrouter",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "u3",
+      "name": "Use OpenAI (paid)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        850
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "u3c",
+              "leftValue": "={{ !!$('Router (multi-AI)').first().json.calls.openai }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h3",
+      "name": "Call OpenAI (paid)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        850
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Router (multi-AI)').first().json.calls.openai.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.openai.body) }}",
+        "options": {
+          "timeout": 60000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi"
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "g3",
+      "name": "Got openai",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1150,
+        850
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g3a",
+              "name": "_provider",
+              "value": "openai",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start (manual test)": {
+      "main": [
+        [
+          {
+            "node": "Owner request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner request": {
+      "main": [
+        [
+          {
+            "node": "Router (multi-AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router (multi-AI)": {
+      "main": [
+        [
+          {
+            "node": "Use Gemini (free)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Gemini (free)?": {
+      "main": [
+        [
+          {
+            "node": "Call Gemini (free)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Groq (free)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini (free)": {
+      "main": [
+        [
+          {
+            "node": "Got gemini",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Groq (free)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Groq (free)?": {
+      "main": [
+        [
+          {
+            "node": "Call Groq (free)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OpenRouter (free)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Groq (free)": {
+      "main": [
+        [
+          {
+            "node": "Got groq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OpenRouter (free)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got groq": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use OpenRouter (free)?": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter (free)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OpenAI (paid)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter (free)": {
+      "main": [
+        [
+          {
+            "node": "Got openrouter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OpenAI (paid)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got openrouter": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use OpenAI (paid)?": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI (paid)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All AIs unavailable: ask owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI (paid)": {
+      "main": [
+        [
+          {
+            "node": "Got openai",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All AIs unavailable: ask owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got openai": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}
