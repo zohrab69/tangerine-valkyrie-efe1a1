@@ -1,0 +1,6 @@
+# Docker reads these inside Linux containers: keep LF line endings on Windows too
+*.yml text eol=lf
+*.env.example text eol=lf
+*.sh text eol=lf
+# PowerShell 5.1 needs CRLF-friendly files
+*.ps1 text eol=crlf

@@ -1,0 +1,7 @@
+# JARVIS: never commit secrets, generated env files or backups
+jarvis/infra/stack/*.env
+jarvis/infra/stack/.env
+!jarvis/infra/stack/*.env.example
+*.tar.gz
+*-container-*.json
+jarvis-backups/

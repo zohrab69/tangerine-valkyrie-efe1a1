@@ -1,0 +1,33 @@
+{
+  "_readme": "What agents may do alone, and what must wait for the owner. Every approval request goes to the owner (Telegram or email via n8n 'send and wait for response') and is logged with the decision.",
+  "autonomous": [
+    "research using approved sources",
+    "analysis, drafting, reporting, monitoring",
+    "AI calls within budget.json caps",
+    "saving drafts (listings, posts, emails) as DRAFT, never published",
+    "routine customer replies from approved templates",
+    "VeraClean booking confirmations and reminders for customers who booked"
+  ],
+  "owner_approval_required": [
+    "launching a new product (Shopify or Amazon)",
+    "publishing anything for the first time on a new channel or template",
+    "any ad spend, new subscription, or recurring charge",
+    "any single expense above 25 CAD",
+    "price changes above 10% or below the approved floor margin",
+    "contracts, quotes outside the approved price sheet, unusual terms",
+    "refunds above 50 CAD, chargebacks, disputes, complaints that mention legal/health/safety",
+    "first outreach message to a new VeraClean prospect list",
+    "account, permission, or API key changes",
+    "strategic changes"
+  ],
+  "never": [
+    "invent data, sources, reviews, or testimonials",
+    "claim a product is profitable without cost data and sources",
+    "scrape sites whose terms forbid it",
+    "message people without a lawful CASL basis",
+    "post content that is not original or licensed",
+    "ship Amazon orders with a third-party supplier as seller of record"
+  ],
+  "approval_timeout_hours": 48,
+  "on_timeout": "treat as rejected, remind once"
+}

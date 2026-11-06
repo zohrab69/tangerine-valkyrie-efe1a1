@@ -1,0 +1,55 @@
+{
+  "_readme": "Single source of truth for which model each kind of task uses. Prices are USD per 1M tokens and MUST be re-checked on the provider pricing pages before relying on cost estimates (last checked from public list prices; providers change them). Providers other than openai are disabled until you add a key and set enabled=true.",
+  "currency_note": "OpenAI bills in USD. Budgets in budget.json are CAD; router converts with usd_to_cad.",
+  "usd_to_cad": 1.40,
+  "tiers": {
+    "T1": {
+      "purpose": "classification, extraction, formatting, short summaries, routine replies",
+      "chain": [
+        { "provider": "openai", "model": "gpt-5-nano", "input_per_m": 0.05, "output_per_m": 0.40 },
+        { "provider": "openrouter", "model": "CHOOSE-CHEAP-MODEL-ON-OPENROUTER", "input_per_m": null, "output_per_m": null, "enabled": false }
+      ],
+      "max_output_tokens": 600
+    },
+    "T2": {
+      "purpose": "routine research synthesis, marketing copy, comparisons, standard analysis",
+      "chain": [
+        { "provider": "openai", "model": "gpt-5-mini", "input_per_m": 0.25, "output_per_m": 2.00 },
+        { "provider": "anthropic", "model": "claude-haiku-5-5", "input_per_m": null, "output_per_m": null, "enabled": false }
+      ],
+      "max_output_tokens": 1500
+    },
+    "T3": {
+      "purpose": "financial evaluation, strategy, independent review of high-impact recommendations",
+      "chain": [
+        { "provider": "openai", "model": "gpt-5", "input_per_m": 1.25, "output_per_m": 10.00 },
+        { "provider": "anthropic", "model": "claude-sonnet-5-5", "input_per_m": null, "output_per_m": null, "enabled": false }
+      ],
+      "max_output_tokens": 3000,
+      "requires": "only for tasks that passed T2 screening or that an approval depends on"
+    }
+  },
+  "task_types": {
+    "classify": "T1",
+    "extract": "T1",
+    "format": "T1",
+    "summarize_short": "T1",
+    "customer_reply_draft": "T1",
+    "research_synthesis": "T2",
+    "marketing_copy": "T2",
+    "video_script": "T2",
+    "competitor_comparison": "T2",
+    "lead_qualification": "T2",
+    "daily_report": "T2",
+    "product_financials": "T3",
+    "independent_review": "T3",
+    "strategy": "T3"
+  },
+  "rules": [
+    "Unknown task_type -> T2, never T3.",
+    "Escalate T1->T2 or T2->T3 at most once per task, only when the cheaper output fails validation (bad JSON, missing sources).",
+    "Fallback to the next provider in the chain only on 429/5xx/timeout, reusing the same task_id and full prompt so context is preserved.",
+    "Never fallback after a provider returned a successful answer (prevents duplicate actions).",
+    "If the next call would exceed any budget cap -> stop, log, ask the owner."
+  ]
+}

@@ -1,0 +1,211 @@
+{
+  "name": "JARVIS CEO v0",
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Start (manual test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a2",
+      "name": "Owner request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Owner request -> one task for JARVIS. Edit \"owner_message\" to test.\n// Later this node is replaced by a Telegram/email/chat trigger.\nconst owner_message = 'Find 3 product ideas we could sell in Canada for under 60 CAD, with reliable shipping.';\nreturn [{\n  json: {\n    task_id: 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),\n    created_at: new Date().toISOString(),\n    business: 'jarvis',\n    agent: 'jarvis_ceo_dispatcher',\n    task_type: 'classify',\n    owner_message,\n    instructions: [\n      'You are JARVIS, the AI CEO coordinating these departments:',\n      'ecommerce (Shopify + Amazon Canada: research, finance, listings, fulfillment),',\n      'marketing (product videos/posts for YouTube Shorts, TikTok, Instagram),',\n      'veraclean (cleaning company in Montreal/Laval: leads, outreach, booking, reports),',\n      'content_channel (independent YouTube/TikTok/Instagram channel),',\n      'trading (PAUSED: never assign work to it).',\n      'Turn the owner message into a work order. Reply with JSON only, with keys:',\n      'department, task_type, priority (low|normal|high), summary,',\n      'steps (array of max 5 short strings, each naming the agent role that does it),',\n      'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',\n      'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).'\n    ].join(' ')\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Router + budget guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Model router + budget guard. Keep ROUTING in sync with jarvis/config/model-routing.json\n// and CAPS with jarvis/config/budget.json.\nconst ROUTING = {\n  usd_to_cad: 1.40,\n  tiers: {\n    T1: { provider: 'openai', model: 'gpt-5-nano', in: 0.05, out: 0.40, max_out: 600,  effort: 'minimal' },\n    T2: { provider: 'openai', model: 'gpt-5-mini', in: 0.25, out: 2.00, max_out: 1500, effort: 'low' },\n    T3: { provider: 'openai', model: 'gpt-5',      in: 1.25, out: 10.0, max_out: 3000, effort: 'medium' },\n  },\n  task_types: {\n    classify: 'T1', extract: 'T1', format: 'T1', summarize_short: 'T1', customer_reply_draft: 'T1',\n    research_synthesis: 'T2', marketing_copy: 'T2', video_script: 'T2', competitor_comparison: 'T2',\n    lead_qualification: 'T2', daily_report: 'T2',\n    product_financials: 'T3', independent_review: 'T3', strategy: 'T3',\n  },\n};\nconst CAPS = { daily_cad: 2.00, monthly_cad: 40, single_call_cad: 0.25 };\n\nconst task = $input.first().json;\nconst tierName = ROUTING.task_types[task.task_type] || 'T2'; // unknown -> T2, never T3\nconst t = ROUTING.tiers[tierName];\n\n// Worst-case estimate: ~4 characters per token, full output budget used.\nconst inputTokens = Math.ceil(((task.instructions || '').length + (task.owner_message || '').length) / 4) + 50;\nconst estUsd = (inputTokens * t.in + t.max_out * t.out) / 1e6;\nconst estCad = +(estUsd * ROUTING.usd_to_cad).toFixed(5);\n\n// Spend ledger. Persists only for production (active/triggered) executions, not manual test runs.\nconst store = $getWorkflowStaticData('global');\nconst today = new Date().toISOString().slice(0, 10);\nconst month = today.slice(0, 7);\nstore.ledger = store.ledger || { day: today, month, day_cad: 0, month_cad: 0 };\nif (store.ledger.day !== today) { store.ledger.day = today; store.ledger.day_cad = 0; }\nif (store.ledger.month !== month) { store.ledger.month = month; store.ledger.month_cad = 0; }\n\nlet reason = 'ok';\nif (estCad > CAPS.single_call_cad) reason = `single call estimate ${estCad} CAD > cap ${CAPS.single_call_cad}`;\nelse if (store.ledger.day_cad + estCad > CAPS.daily_cad) reason = `daily cap ${CAPS.daily_cad} CAD reached`;\nelse if (store.ledger.month_cad + estCad > CAPS.monthly_cad) reason = `monthly cap ${CAPS.monthly_cad} CAD reached`;\n\nreturn [{\n  json: {\n    ...task,\n    route: { tier: tierName, provider: t.provider, model: t.model, max_output_tokens: t.max_out,\n             reasoning_effort: t.effort, price_in_per_m_usd: t.in, price_out_per_m_usd: t.out,\n             usd_to_cad: ROUTING.usd_to_cad },\n    est_cost_cad: estCad,\n    within_budget: reason === 'ok',\n    budget_reason: reason,\n    ledger_before: { ...store.ledger },\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Within budget?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.within_budget }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a5",
+      "name": "Call OpenAI (Responses API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.route.model, instructions: $json.instructions, input: $json.owner_message, max_output_tokens: $json.route.max_output_tokens, reasoning: { effort: $json.route.reasoning_effort }, text: { format: { type: 'json_object' } }, store: false }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a6",
+      "name": "Parse, cost & log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Parse the OpenAI Responses API result, compute ACTUAL cost from usage, update ledger.\nconst task = $('Router + budget guard').first().json;\nconst res = $input.first().json;\n\nlet text = res.output_text || '';\nif (!text && Array.isArray(res.output)) {\n  for (const item of res.output) {\n    if (item.type === 'message' && Array.isArray(item.content)) {\n      for (const c of item.content) if (c.type === 'output_text') text += c.text;\n    }\n  }\n}\nlet decision = null, parse_error = null;\ntry { decision = JSON.parse(text); } catch (e) { parse_error = 'Model did not return valid JSON: ' + e.message; }\n\nconst u = res.usage || {};\nconst inTok = u.input_tokens || 0, outTok = u.output_tokens || 0;\nconst r = task.route;\nconst costCad = +(((inTok * r.price_in_per_m_usd + outTok * r.price_out_per_m_usd) / 1e6) * r.usd_to_cad).toFixed(6);\n\nconst store = $getWorkflowStaticData('global');\nif (store.ledger) { store.ledger.day_cad += costCad; store.ledger.month_cad += costCad; }\n\nreturn [{\n  json: {\n    task_id: task.task_id,\n    agent: task.agent,\n    model: res.model || r.model,\n    tier: r.tier,\n    status: res.status || 'unknown',\n    decision,\n    parse_error,\n    usage: { input_tokens: inTok, output_tokens: outTok },\n    cost_cad: costCad,\n    cost_note: 'Estimate from list prices in the router; the provider invoice is authoritative.',\n    ledger_after: store.ledger || null,\n    logged_at: new Date().toISOString(),\n  },\n}];\n"
+      }
+    },
+    {
+      "id": "a7",
+      "name": "Stop: ask owner (budget)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Budget cap reached: nothing was sent to any AI provider.\n// Phase 2 replaces this with a Telegram 'send and wait for approval' message.\nconst t = $input.first().json;\nreturn [{ json: { task_id: t.task_id, status: 'blocked_budget', reason: t.budget_reason,\n  message_to_owner: `JARVIS paused task ${t.task_id}: ${t.budget_reason}. Approve a higher cap or wait.` } }];\n"
+      }
+    },
+    {
+      "id": "a8",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -40
+      ],
+      "parameters": {
+        "width": 1180,
+        "height": 220,
+        "content": "## JARVIS CEO v0 - dispatcher test\n1. Open **Call OpenAI** and pick your OpenAI credential (Credentials > New > OpenAI, paste the key there, never in chat).\n2. Click **Execute workflow**. Expected: *Parse, cost & log* shows a JSON work order and a cost of a fraction of a cent.\n3. Edit `owner_message` in **Owner request** to try other requests.\n\nRouting/caps live in the Router code (mirror of jarvis/config/*.json). The spend ledger only persists for activated (production) runs."
+      }
+    }
+  ],
+  "connections": {
+    "Start (manual test)": {
+      "main": [
+        [
+          {
+            "node": "Owner request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Owner request": {
+      "main": [
+        [
+          {
+            "node": "Router + budget guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router + budget guard": {
+      "main": [
+        [
+          {
+            "node": "Within budget?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Within budget?": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI (Responses API)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: ask owner (budget)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI (Responses API)": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}

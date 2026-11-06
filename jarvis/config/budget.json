@@ -1,0 +1,16 @@
+{
+  "_readme": "Hard caps the router enforces before every AI call. Also set the same caps in the provider dashboards (OpenAI: Settings > Limits / project budget) - the dashboard cap is the real safety net; this file is the early warning.",
+  "currency": "CAD",
+  "ai_monthly_cap": 40,
+  "ai_daily_cap": 2.00,
+  "single_call_cap": 0.25,
+  "alert_at_percent": [50, 80, 100],
+  "on_cap_reached": "stop_and_ask_owner",
+  "separate_budgets_not_managed_by_ai": {
+    "shopify_subscription": "owner approval",
+    "amazon_professional_plan": "owner approval",
+    "advertising": "owner approval per campaign, with a daily cap",
+    "supplier_samples_and_orders": "owner approval",
+    "domain_hosting_video_tools": "owner approval"
+  }
+}

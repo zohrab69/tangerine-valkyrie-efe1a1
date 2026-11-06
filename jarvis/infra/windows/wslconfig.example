@@ -1,0 +1,24 @@
+# Copy to C:\Users\<you>\.wslconfig  (file name starts with a dot, no extension)
+# Limits how much of your 8 GB the Docker/WSL 2 VM may take, so Windows stays usable.
+#
+# IMPORTANT ORDER: apply this only AFTER 02-backup.ps1 succeeded.
+# Applying it needs "wsl --shutdown", which stops Docker Desktop and every
+# container. A container started with --rm is deleted by that (data stays
+# safe in n8n_data). Do Path B first, or be ready to start n8n again the
+# way you did before.
+#
+# Then in PowerShell:   wsl --shutdown     (Docker Desktop restarts by itself or start it)
+
+# memory: n8n ~0.5-1 GB + sandbox ~1-2 GB + headroom (WSL default is 50% of RAM = 4 GB anyway)
+# processors: i5-1035G4 has 4 cores / 8 threads; leave the rest for Windows
+# swap: on the NVMe SSD; slower instead of out-of-memory crashes
+# networkingMode is left at default (NAT) on purpose: localhost:5678 keeps working.
+# (Keep comments on their own lines: WSL does not support comments after a value.)
+[wsl2]
+memory=4GB
+processors=4
+swap=6GB
+
+# gives freed RAM back to Windows over time
+[experimental]
+autoMemoryReclaim=gradual
