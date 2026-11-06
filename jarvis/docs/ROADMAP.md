@@ -9,14 +9,14 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 ## Phase 1: Infrastructure (current)
 - [x] Docker Desktop, WSL 2, Compose, n8n on :5678, volume `n8n_data`, owner account *(as you reported it)*
 - [x] OpenAI API key, US$10 credit, auto-recharge off *(as you reported it)*
-- [~] Inspect container: `01-inspect.ps1`
+- [x] Inspect container: `01-inspect.ps1` ran 2026-11-06. Container `n8n`, n8n 2.45.7, restart unless-stopped (no `--rm`), encryption key inside the volume, Docker limit 3.7 GB, Windows RAM at 90%
 - [~] Verified backup with restore test: `02-backup.ps1`
 - [~] Sandbox stack: `03-setup-sandbox.ps1` + `infra/stack/compose.yml`
 - [~] Connect n8n to the sandbox: `04-connect-n8n.ps1` and the Service URL/API key in the n8n UI
 - [~] First agent: `workflows/jarvis-ceo-v0.json` (dispatcher, router, budget guard)
 - [~] Health check: `05-verify.ps1`
 - [ ] OpenAI dashboard: monthly budget, alerts, separate "jarvis" project key
-- [ ] Optional Path B: `06-migrate-n8n-to-compose.ps1` (recommended if the container uses `--rm`)
+- [ ] Optional Path B: `06-migrate-n8n-to-compose.ps1` (not needed now: the container already restarts by itself)
 - [ ] Optional: `.wslconfig` memory limit (after Path B)
 
 **Done when:** `05-verify.ps1` passes, the Assistant runs code, and JARVIS CEO v0 returns a work order costing under 1¢.

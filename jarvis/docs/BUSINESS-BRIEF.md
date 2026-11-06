@@ -26,6 +26,9 @@ Trading stays paused.
   Shopify Canada launches first. Amazon.ca runs in parallel as research and account
   registration (approval takes time), and selling there starts only with products and suppliers
   that meet Amazon's dropshipping rules (seller of record, blind shipping, fast delivery).
+- **Owner answers (2026-11-06):** approvals and alerts go through **Telegram**. **No electronics or
+  cosmetics** in product research. **Starting budget: $200** (assumed CAD) for Shopify, domain and test orders.
+  This is separate from the AI cap in `config/budget.json`.
 - **Backbone:** keep **n8n**, which is free, already installed, and has the integrations needed. Use separate services only
   where n8n cannot do the job alone: phone calls, video rendering, social APIs.
 - **24/7 means a cloud server.** The laptop is for building. Move to a small VPS (about CA$10/month)
