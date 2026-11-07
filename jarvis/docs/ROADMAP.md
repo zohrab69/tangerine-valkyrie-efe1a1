@@ -69,7 +69,10 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Original research and scripts, AI disclosure where required
 
 ## Phase 9: Cloud (started 2026-11-06: owner chose to move now)
-- [ ] n8n owner account, secrets saved to password manager, OmniRoute providers and combos on the server
+- [x] n8n owner account on the server; server secrets saved by owner; OmniRoute dashboard password set (2026-11-07)
+- [x] OmniRoute provider: Gemini (Google AI Studio) API key connected and tested (gemini flash answered, ~28 s first call)
+- [ ] OmniRoute: Groq key, combos `jarvis-free` / `jarvis-paid`, OmniRoute API key for n8n
+- [ ] Restart server once for pending kernel update (`reboot`)
 - [x] Server live 2026-11-07: Hetzner CX23 Helsinki, 2.29.114.208, https://n8n.2-29-114-208.sslip.io (n8n 2.45.7 + Postgres, OmniRoute 3.8.53, Caddy HTTPS, 1.2 of 3.7 GB RAM used). Setup from `infra/server/` (Hetzner CX23, Caddy HTTPS via sslip.io, n8n + Postgres, OmniRoute private, firewall, swap, daily backups)
 - [ ] VPS (~CA$10/month) with n8n + Postgres, Caddy HTTPS, daily off-site backups
 - [ ] Daytona for the Assistant sandbox, or keep it on the laptop
