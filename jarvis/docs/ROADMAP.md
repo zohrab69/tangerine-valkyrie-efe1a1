@@ -33,6 +33,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] **JARVIS on Telegram live (2026-11-08):** `jarvis-telegram-v3.json` published on the server; owner message -> work order reply in Telegram, free AI, $0. Fix applied: Telegram parse mode HTML (underscores broke Markdown)
 - [x] (live 2026-11-08, Decline tested: reply showed REJECTED; v3 unpublished) `jarvis-telegram-v4.json`: fixed approval rule in code (AI can only make it stricter) + Telegram Approve/Decline buttons (48 h, no answer = rejected); logic tested offline
 - [ ] Error alerts on Telegram (Error Trigger workflow)
+- [ ] Voice, owner chose **later** (2026-11-08): level 1 Telegram voice messages (Groq speech-to-text, free); level 2 urgent-only phone calls via Twilio (~CA$2-3/month); level 3 live voice agent (Vapi/Retell/ElevenLabs, ~US$0.07-0.15/min)
 - [ ] `jarvis.ceo`: dispatch to managers and a daily report
 - [ ] `ecom.manager` plus the research/finance roles as the funnel in ARCHITECTURE.md §2
 - [ ] Finance 1 unit-economics calculator (code, no AI) with unit tests
