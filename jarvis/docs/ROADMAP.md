@@ -30,7 +30,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Data Tables: tasks, approvals, actions, ledger, decisions, products
 - [ ] `llm.call` sub-workflow (router from v0, with fallback chain, persistent ledger, JSON validation)
 - [x] Telegram bot created (owner chat ID 6203634137), `JARVIS Telegram` credential saved in server n8n (2026-11-08)
-- [~] `workflows/jarvis-telegram-v3.json`: owner messages JARVIS on Telegram -> work order reply (owner-only filter; logic tested offline)
+- [x] **JARVIS on Telegram live (2026-11-08):** `jarvis-telegram-v3.json` published on the server; owner message -> work order reply in Telegram, free AI, $0. Fix applied: Telegram parse mode HTML (underscores broke Markdown)
+- [ ] Owner-approval rule: product selection should set needs_owner_approval=true consistently (answers varied between runs)
 - [ ] Telegram approval buttons (send-and-wait) and alerts; Error Trigger workflow
 - [ ] `jarvis.ceo`: dispatch to managers and a daily report
 - [ ] `ecom.manager` plus the research/finance roles as the funnel in ARCHITECTURE.md §2
