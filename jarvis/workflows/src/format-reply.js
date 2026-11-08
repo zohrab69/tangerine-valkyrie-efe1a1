@@ -20,4 +20,6 @@ if (j.message_to_owner) {
     'Answered by: ' + j.answered_by + ' (' + j.model + '), cost: ' + j.cost_cad + ' CAD',
   ];
 }
-return [{ json: { reply_text: lines.join('\n').slice(0, 4000) } }];
+// Sent with parse_mode HTML: escape the three characters HTML treats specially.
+const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+return [{ json: { reply_text: esc(lines.join('\n')).slice(0, 4000) } }];

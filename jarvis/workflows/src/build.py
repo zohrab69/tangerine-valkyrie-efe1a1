@@ -163,7 +163,7 @@ tg_tail = (
    node("t9", "Reply on Telegram", "n8n-nodes-base.telegram", 1.2, [1950, 400], {
         "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
         "text": "={{ $json.reply_text }}",
-        "additionalFields": {"appendAttribution": False}})],
+        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}})],
   {"Format reply": {"main": [[{"node": "Reply on Telegram", "type": "main", "index": 0}]]}},
   "Format reply")
 chain_workflow("JARVIS Telegram v3", "jarvis-telegram-v3.json", "omniroute-router.js",
