@@ -244,3 +244,84 @@ chain_workflow("JARVIS Voice v1 (screen)", "jarvis-voice-v1.json", "omniroute-ro
     "The page at https://jarvis.<server>.sslip.io (password protected) sends your words here. JARVIS answers the screen at once; approvals go to your Telegram with buttons.\n"
     "Setup: *Webhook* -> Header Auth credential **JARVIS screen key** (Name X-Jarvis-Key, Value = VOICE_SECRET printed by voice-setup.sh). **OmniRoute** in both *Call* nodes. **JARVIS Telegram** in *Ask owner to approve* and *Reply on Telegram*. Save, then Publish.",
     front=voice_front, tail=voice_tail)
+
+# ---------------------------------------------------------------------------
+# Research v1: CJ product research -> finance math -> free-AI notes -> Telegram report.
+def rcode(f): return (here / "research" / f).read_text()
+CJ = "https://developers.cjdropshipping.com/api2.0/v1"
+TOKEN_HDR = {"parameters": [{"name": "CJ-Access-Token", "value": "={{ $json.token }}"}]}
+THROTTLE = {"batching": {"batch": {"batchSize": 1, "batchInterval": 1500}}, "timeout": 30000}
+def ifnode(id_, name, pos, expr):
+    return node(id_, name, "n8n-nodes-base.if", 2.2, pos, {
+        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                       "conditions": [{"id": id_ + "c", "leftValue": expr, "rightValue": "",
+                                       "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                       "combinator": "and"}, "options": {}})
+rn = [
+  node("r0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -260], {"width": 1500, "height": 230, "content":
+      "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\n"
+      "Runs every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
+      "gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\n"
+      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send report*.\n"
+      "All money figures are estimates. Nothing is ordered or published."}),
+  node("r1", "Every Monday 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
+       {"rule": {"interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 10}]}}),
+  node("r2", "Run now (manual)", "n8n-nodes-base.manualTrigger", 1, [0, 200], {}),
+  node("r3", "Research plan", "n8n-nodes-base.code", 2, [220, 100], {"jsCode": rcode("1-plan.js")}),
+  ifnode("r4", "Need a new CJ token?", [440, 100], "={{ $json.need_token === true }}"),
+  node("r5", "CJ get token", "n8n-nodes-base.httpRequest", 4.2, [660, -20], {
+       "method": "POST", "url": CJ + "/authentication/getAccessToken",
+       "authentication": "genericCredentialType", "genericAuthType": "httpCustomAuth",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={}", "options": {"timeout": 30000}}),
+  node("r6", "Save token", "n8n-nodes-base.code", 2, [880, -20], {"jsCode": rcode("2-save-token.js")}),
+  node("r7", "Searches", "n8n-nodes-base.code", 2, [1100, 100], {"jsCode": rcode("3-searches.js")}),
+  node("r8", "CJ product search", "n8n-nodes-base.httpRequest", 4.2, [1320, 100], {
+       "method": "GET", "url": CJ + "/product/list",
+       "sendQuery": True, "queryParameters": {"parameters": [
+           {"name": "pageNum", "value": "1"}, {"name": "pageSize", "value": "={{ $json.page_size }}"},
+           {"name": "productNameEn", "value": "={{ $json.keyword }}"}]},
+       "sendHeaders": True, "headerParameters": TOKEN_HDR, "options": THROTTLE}, onError="continueRegularOutput"),
+  node("r9", "Screen products", "n8n-nodes-base.code", 2, [1540, 100], {"jsCode": rcode("4-screen.js")}),
+  ifnode("r10", "Nothing found?", [1760, 100], "={{ $json.empty === true }}"),
+  node("r11", "CJ variants", "n8n-nodes-base.httpRequest", 4.2, [1980, 200], {
+       "method": "GET", "url": CJ + "/product/variant/query",
+       "sendQuery": True, "queryParameters": {"parameters": [{"name": "pid", "value": "={{ $json.pid }}"}]},
+       "sendHeaders": True, "headerParameters": TOKEN_HDR, "options": THROTTLE}, onError="continueRegularOutput"),
+  node("r12", "Pick variant", "n8n-nodes-base.code", 2, [2200, 200], {"jsCode": rcode("5-pick-variant.js")}),
+  node("r13", "CJ shipping to Canada", "n8n-nodes-base.httpRequest", 4.2, [2420, 200], {
+       "method": "POST", "url": CJ + "/logistic/freightCalculate",
+       "sendHeaders": True, "headerParameters": TOKEN_HDR,
+       "sendBody": True, "specifyBody": "json",
+       "jsonBody": "={{ JSON.stringify({ startCountryCode: 'CN', endCountryCode: 'CA', products: [{ quantity: 1, vid: $json.vid }] }) }}",
+       "options": THROTTLE}, onError="continueRegularOutput"),
+  node("r14", "Finance (no AI)", "n8n-nodes-base.code", 2, [2640, 200], {"jsCode": rcode("6-finance.js")}),
+  node("r15", "Shortlist", "n8n-nodes-base.code", 2, [2860, 200], {"jsCode": rcode("7-shortlist.js")}),
+  node("r16", "AI notes (free)", "n8n-nodes-base.httpRequest", 4.2, [3080, 200], {
+       "method": "POST", "url": "http://omniroute:20128/v1/chat/completions",
+       "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+       "options": {"timeout": 90000}}, onError="continueRegularOutput"),
+  node("r17", "Report", "n8n-nodes-base.code", 2, [3300, 200], {"jsCode": rcode("8-report.js")}),
+  node("r18", "Nothing-found report", "n8n-nodes-base.code", 2, [3300, 0], {"jsCode": rcode("9-empty.js")}),
+  node("r19", "Send report", "n8n-nodes-base.telegram", 1.2, [3520, 100], {
+       "chatId": OWNER_CHAT_ID, "text": "={{ $json.report }}",
+       "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
+]
+L = lambda a, b, out=0: (a, out, b)
+links = [L("Every Monday 10:00", "Research plan"), L("Run now (manual)", "Research plan"),
+         L("Research plan", "Need a new CJ token?"), L("Need a new CJ token?", "CJ get token", 0), L("Need a new CJ token?", "Searches", 1),
+         L("CJ get token", "Save token"), L("Save token", "Searches"), L("Searches", "CJ product search"),
+         L("CJ product search", "Screen products"), L("Screen products", "Nothing found?"),
+         L("Nothing found?", "Nothing-found report", 0), L("Nothing found?", "CJ variants", 1),
+         L("CJ variants", "Pick variant"), L("Pick variant", "CJ shipping to Canada"), L("CJ shipping to Canada", "Finance (no AI)"),
+         L("Finance (no AI)", "Shortlist"), L("Shortlist", "AI notes (free)"), L("AI notes (free)", "Report"),
+         L("Report", "Send report"), L("Nothing-found report", "Send report")]
+rc = {}
+for a, out, b in links:
+    outs = rc.setdefault(a, {"main": []})["main"]
+    while len(outs) <= out: outs.append([])
+    outs[out].append({"node": b, "type": "main", "index": 0})
+wfr = {"name": "JARVIS Research v1 (CJ products)", "nodes": rn, "connections": rc,
+       "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}
+(here.parent / "jarvis-research-v1.json").write_text(json.dumps(wfr, indent=2) + "\n")
+print("wrote jarvis-research-v1.json")

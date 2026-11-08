@@ -1,0 +1,651 @@
+{
+  "name": "JARVIS Research v1 (CJ products)",
+  "nodes": [
+    {
+      "id": "r0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -260
+      ],
+      "parameters": {
+        "width": 1500,
+        "height": 230,
+        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send report*.\nAll money figures are estimates. Nothing is ordered or published."
+      }
+    },
+    {
+      "id": "r1",
+      "name": "Every Monday 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2",
+      "name": "Run now (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "r3",
+      "name": "Research plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Research plan: which searches to run this time, and whether we need a new CJ token.\n// Rules from the owner: Canada first, no electronics, no cosmetics. Kids/baby, food,\n// supplements and medical items are also skipped (extra Canadian safety/import rules).\nconst CONFIG = {\n  keywords: [\n    'kitchen gadget', 'kitchen organizer', 'pet grooming', 'pet bowl', 'home storage',\n    'closet organizer', 'bathroom accessories', 'car organizer', 'camping gear',\n    'yoga accessories', 'garden tools', 'cleaning brush', 'desk organizer', 'travel accessories',\n  ],\n  per_run: 3,              // searches per run (CJ allows about 1 request per second)\n  page_size: 20,\n};\nconst store = $getWorkflowStaticData('global');\nconst start = (store.kwIndex || 0) % CONFIG.keywords.length;\nconst picked = [0, 1, 2].slice(0, CONFIG.per_run).map(i => CONFIG.keywords[(start + i) % CONFIG.keywords.length]);\nstore.kwIndex = start + CONFIG.per_run;\n// Owner can force keywords when calling this workflow from another one (Execute Workflow input).\nconst forced = ($input.first().json && $input.first().json.keywords) || null;\nconst keywords = Array.isArray(forced) && forced.length ? forced.slice(0, 5) : picked;\nconst t = store.cjToken;\nconst tokenOk = t && t.value && t.expires && new Date(t.expires).getTime() - Date.now() > 24 * 3600 * 1000;\nreturn [{ json: { run_id: 'research_' + Date.now().toString(36), keywords, page_size: CONFIG.page_size,\n                  need_token: !tokenOk, token: tokenOk ? t.value : null } }];\n"
+      }
+    },
+    {
+      "id": "r4",
+      "name": "Need a new CJ token?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r4c",
+              "leftValue": "={{ $json.need_token === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r5",
+      "name": "CJ get token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r6",
+      "name": "Save token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "// Keep the CJ access token (valid about 15 days; CJ limits how often a new one can be requested).\nconst r = $input.first().json || {};\nconst d = r.data || {};\nconst value = d.accessToken || d.access_token || null;\nif (!value) throw new Error('CJ did not return an access token: ' + JSON.stringify(r).slice(0, 300));\nconst expires = d.accessTokenExpiryDate || new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString();\nconst store = $getWorkflowStaticData('global');\nstore.cjToken = { value, expires };\nconst plan = $('Research plan').first().json;\nreturn [{ json: { ...plan, need_token: false, token: value } }];\n"
+      }
+    },
+    {
+      "id": "r7",
+      "name": "Searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// One item per keyword -> one CJ product search each.\nconst plan = $input.first().json;\nreturn plan.keywords.map(k => ({ json: { keyword: k, token: plan.token, page_size: plan.page_size, run_id: plan.run_id } }));\n"
+      }
+    },
+    {
+      "id": "r8",
+      "name": "CJ product search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/list",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pageNum",
+              "value": "1"
+            },
+            {
+              "name": "pageSize",
+              "value": "={{ $json.page_size }}"
+            },
+            {
+              "name": "productNameEn",
+              "value": "={{ $json.keyword }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r9",
+      "name": "Screen products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Screen CJ search results (no AI): excluded categories, price band, de-duplicate, rank by how many\n// stores already list the product on CJ (a real demand signal, not a guess). Keeps the best 8.\nconst EXCLUDE = /(electr|usb|batter|charg|bluetooth|earphone|headphone|speaker|camera|phone|smart ?watch|\\bled\\b|lamp|cosmetic|make ?up|lipstick|mascara|skin ?care|serum|cream|perfume|nail polish|hair dye|toy|\\bkid|child|baby|infant|toddler|food|snack|supplement|vitamin|medical|medicine|knife set|weapon|vape|e-cig|cbd|lithium)/i;\nconst MAX_COST_USD = 20;   // supplier price ceiling, before shipping\nconst searches = $('Searches').all().map(i => i.json);\nconst out = [], seen = new Set(), notes = [];\n$input.all().forEach((item, idx) => {\n  const r = item.json || {};\n  if (r.error) { notes.push(`search \"${searches[idx]?.keyword}\": request failed (${(r.error.message || JSON.stringify(r.error)).slice(0, 120)})`); return; }\n  if (r.result === false || (r.code && r.code !== 200)) { notes.push(`search \"${searches[idx]?.keyword}\": CJ said ${r.message || r.code}`); return; }\n  const d = r.data || {};\n  let list = d.list || d.content || [];\n  if (list.length && list[0] && Array.isArray(list[0].productList)) list = list.flatMap(x => x.productList);\n  for (const p of list) {\n    const pid = p.pid || p.id; if (!pid || seen.has(pid)) continue;\n    const name = p.productNameEn || p.nameEn || p.productName || '';\n    const cat = p.categoryName || p.threeCategoryName || '';\n    const price = parseFloat(String(p.sellPrice ?? p.nowPrice ?? '').split('-')[0]);\n    if (!name || EXCLUDE.test(name + ' ' + cat) || !(price > 0) || price > MAX_COST_USD) continue;\n    seen.add(pid);\n    out.push({ pid, name: name.slice(0, 120), category: cat, sku: p.productSku || p.sku || '',\n               image: p.productImage || p.bigImage || '', list_price_usd: price,\n               listed_by_stores: Number(p.listedNum ?? p.listedShopNum ?? 0) || 0,\n               keyword: searches[idx]?.keyword || '', token: searches[0]?.token });\n  }\n});\nout.sort((a, b) => b.listed_by_stores - a.listed_by_stores);\nconst keep = out.slice(0, 8);\nif (!keep.length) return [{ json: { empty: true, notes, token: searches[0]?.token } }];\nreturn keep.map(p => ({ json: { ...p, screen_notes: notes } }));\n"
+      }
+    },
+    {
+      "id": "r10",
+      "name": "Nothing found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r10c",
+              "leftValue": "={{ $json.empty === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r11",
+      "name": "CJ variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/variant/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pid",
+              "value": "={{ $json.pid }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r12",
+      "name": "Pick variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// First sellable variant of each product: its id (needed for shipping), price and weight.\nconst prods = $('Screen products').all().map(i => i.json);\nreturn $input.all().map((item, idx) => {\n  const p = prods[idx]; const r = item.json || {};\n  const vs = Array.isArray(r.data) ? r.data : (r.data && (r.data.variants || r.data.list)) || [];\n  const v = vs.find(x => x && (x.vid || x.variantId)) || null;\n  return { json: { ...p, vid: v ? (v.vid || v.variantId) : null,\n                   variant_name: v ? (v.variantNameEn || v.variantName || '') : '',\n                   cost_usd: v ? parseFloat(v.variantSellPrice ?? v.sellPrice ?? p.list_price_usd) || p.list_price_usd : p.list_price_usd,\n                   weight_g: v ? Number(v.variantWeight ?? v.weight ?? 0) || null : null } };\n});\n"
+      }
+    },
+    {
+      "id": "r13",
+      "name": "CJ shipping to Canada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/logistic/freightCalculate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ startCountryCode: 'CN', endCountryCode: 'CA', products: [{ quantity: 1, vid: $json.vid }] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r14",
+      "name": "Finance (no AI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Finance 1 (pure arithmetic, no AI). Every number is an ESTIMATE from CJ's quoted prices.\nconst F = {\n  usd_to_cad: 1.40,          // check the current rate before relying on results\n  markup: 2.5,               // suggested retail = landed cost x markup, then rounded to .99\n  min_profit_cad: 12,        // or at least this much above landed cost\n  max_retail_cad: 60,        // owner's price ceiling\n  payment_pct: 0.029, payment_fixed_cad: 0.30,   // card processing (verify on your Shopify plan)\n  returns_pct: 0.05,         // allowance for refunds/returns\n  marketing_pct: 0.20,       // allowance for ads/promotion per sale\n  max_days: 20,              // longest acceptable delivery estimate to Canada\n};\nconst prods = $('Pick variant').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((item, idx) => {\n  const p = prods[idx]; const r = item.json || {};\n  const opts = (Array.isArray(r.data) ? r.data : []).map(o => ({\n    name: o.logisticName || o.name || '?', usd: parseFloat(o.logisticPrice ?? o.price), days: String(o.logisticAging || o.aging || '')\n  })).filter(o => o.usd >= 0);\n  const maxDays = o => { const n = (o.days.match(/\\d+/g) || []).map(Number); return n.length ? Math.max(...n) : 99; };\n  const ok = opts.filter(o => maxDays(o) <= F.max_days).sort((a, b) => a.usd - b.usd);\n  const ship = ok[0] || opts.sort((a, b) => a.usd - b.usd)[0] || null;\n  const landed_usd = p.cost_usd + (ship ? ship.usd : 0);\n  const landed = +(landed_usd * F.usd_to_cad).toFixed(2);\n  let price = Math.max(landed * F.markup, landed + F.min_profit_cad);\n  price = Math.ceil(price) - 0.01;\n  const fees = price * F.payment_pct + F.payment_fixed_cad;\n  const profit = +(price - landed - fees - price * F.returns_pct - price * F.marketing_pct).toFixed(2);\n  const flags = [];\n  if (!p.vid) flags.push('no variant data');\n  if (!ship) flags.push('no shipping quote to Canada');\n  else if (maxDays(ship) > F.max_days) flags.push('slow delivery (' + ship.days + ' days)');\n  if (price > F.max_retail_cad) flags.push('price above ' + F.max_retail_cad + ' CAD');\n  if (profit < 8) flags.push('thin profit');\n  out.push({ json: { ...p, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),\n                     est_profit_cad: profit, margin_pct: Math.round(profit / price * 100), flags,\n                     estimate_note: 'Estimates from CJ quotes; excludes sales tax, duties and samples.' } });\n});\nreturn out;\n"
+      }
+    },
+    {
+      "id": "r15",
+      "name": "Shortlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Rank: no blocking flags first, then estimated profit x demand signal. Top 5. Build the AI prompt.\nconst all = $input.all().map(i => i.json);\nconst blocking = f => f.some(x => /no shipping|slow|above/.test(x));\nall.sort((a, b) => (blocking(a.flags) - blocking(b.flags)) ||\n                   (b.est_profit_cad * Math.log2(2 + b.listed_by_stores) - a.est_profit_cad * Math.log2(2 + a.listed_by_stores)));\nconst top = all.slice(0, 5);\nconst facts = top.map((p, i) => ({ n: i + 1, pid: p.pid, name: p.name, category: p.category, cost_usd: p.cost_usd,\n  shipping: p.shipping, landed_cad: p.landed_cad, price_cad: p.price_cad, est_profit_cad: p.est_profit_cad,\n  listed_by_stores: p.listed_by_stores, flags: p.flags }));\nconst instructions = 'You are the JARVIS e-commerce research analyst for a new Shopify store selling in Canada. ' +\n  'For each product below write one short note (max 25 words): who would buy it and the main risk. Use ONLY the facts given; ' +\n  'do not invent sales numbers, trends, reviews or prices. Reply with JSON only: {\"notes\":[{\"n\":1,\"note\":\"...\"}]}';\nreturn [{ json: { top, instructions, ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },\n  messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify(facts) }] } } }];\n"
+      }
+    },
+    {
+      "id": "r16",
+      "name": "AI notes (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://omniroute:20128/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r17",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Telegram report (HTML). Works with or without the AI notes.\nconst s = $('Shortlist').first().json;\nconst plan = $('Research plan').first().json;\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet notes = {};\ntry {\n  const r = $input.first().json || {};\n  const txt = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '');\n  for (const x of (JSON.parse(txt).notes || [])) notes[x.n] = x.note;\n} catch (e) { /* AI notes are optional */ }\nconst lines = ['<b>JARVIS product research</b> (' + esc(plan.keywords.join(', ')) + ')', ''];\ns.top.forEach((p, i) => {\n  lines.push(`<b>${i + 1}. ${esc(p.name)}</b>`);\n  lines.push(`Supplier: CJ, SKU ${esc(p.sku || p.pid)}, ${p.listed_by_stores} stores list it`);\n  lines.push(`Cost ${p.cost_usd.toFixed(2)} USD + shipping ${p.shipping ? p.shipping.usd.toFixed(2) + ' USD (' + esc(p.shipping.name) + ', ' + esc(p.shipping.days) + ' days)' : 'unknown'}`);\n  lines.push(`Landed ~${p.landed_cad} CAD | suggested price ${p.price_cad} CAD | est. profit ${p.est_profit_cad} CAD (${p.margin_pct}%)`);\n  if (p.flags.length) lines.push('Watch: ' + esc(p.flags.join('; ')));\n  if (notes[i + 1]) lines.push('<i>' + esc(notes[i + 1]) + '</i>');\n  lines.push('');\n});\nlines.push('All money figures are estimates from CJ quotes (USD to CAD at 1.40), before sales tax and duties. Nothing was ordered or published.');\nlines.push('Next step (not automatic yet): tell JARVIS which numbers interest you. Ordering samples will always ask for your approval first.');\nreturn [{ json: { report: lines.join('\\n').slice(0, 4000), count: s.top.length } }];\n"
+      }
+    },
+    {
+      "id": "r18",
+      "name": "Nothing-found report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nothing passed the screen: tell the owner why instead of staying silent.\nconst r = $input.first().json || {};\nconst plan = $('Research plan').first().json;\nconst why = (r.notes && r.notes.length) ? r.notes.join('; ') : 'no product passed the filters (price, excluded categories)';\nreturn [{ json: { report: 'JARVIS product research (' + plan.keywords.join(', ') + '): no candidates this time. ' + why.replace(/[<>&]/g, ' ') } }];\n"
+      }
+    },
+    {
+      "id": "r19",
+      "name": "Send report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        100
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.report }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 10:00": {
+      "main": [
+        [
+          {
+            "node": "Research plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now (manual)": {
+      "main": [
+        [
+          {
+            "node": "Research plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research plan": {
+      "main": [
+        [
+          {
+            "node": "Need a new CJ token?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need a new CJ token?": {
+      "main": [
+        [
+          {
+            "node": "CJ get token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ get token": {
+      "main": [
+        [
+          {
+            "node": "Save token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save token": {
+      "main": [
+        [
+          {
+            "node": "Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Searches": {
+      "main": [
+        [
+          {
+            "node": "CJ product search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ product search": {
+      "main": [
+        [
+          {
+            "node": "Screen products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screen products": {
+      "main": [
+        [
+          {
+            "node": "Nothing found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nothing found?": {
+      "main": [
+        [
+          {
+            "node": "Nothing-found report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CJ variants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ variants": {
+      "main": [
+        [
+          {
+            "node": "Pick variant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick variant": {
+      "main": [
+        [
+          {
+            "node": "CJ shipping to Canada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ shipping to Canada": {
+      "main": [
+        [
+          {
+            "node": "Finance (no AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finance (no AI)": {
+      "main": [
+        [
+          {
+            "node": "Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shortlist": {
+      "main": [
+        [
+          {
+            "node": "AI notes (free)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI notes (free)": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report": {
+      "main": [
+        [
+          {
+            "node": "Send report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nothing-found report": {
+      "main": [
+        [
+          {
+            "node": "Send report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}
