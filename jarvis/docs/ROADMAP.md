@@ -77,7 +77,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] OmniRoute combo `jarvis-free` (Priority: Groq gpt-oss-120b, then Gemini 3.8 Flash) and API key `n8n-jarvis` (no management access) created 2026-11-07
 - [ ] OmniRoute: add backups to combo (Groq gpt-oss-20b, Gemini 2.5 Flash Lite); `jarvis-paid` combo after adding OpenAI key
 - [x] **First JARVIS agent live on the server (2026-11-07):** `JARVIS CEO v2 (OmniRoute)` ran end to end. The free combo answered (Groq openai/gpt-oss-120b, 306 in / 388 out tokens, $0) with a valid work order: department ecommerce, task_type research, needs_owner_approval false, data_needed listed (no invented data)
-- [ ] Restart server once for pending kernel update (`reboot`)
+- [x] Server restarted for kernel update (2026-11-08); all 5 containers came back on their own (n8n, Postgres, OmniRoute, Redis, Caddy)
 - [x] Server live 2026-11-07: Hetzner CX23 Helsinki, 2.29.114.208, https://n8n.2-29-114-208.sslip.io (n8n 2.45.7 + Postgres, OmniRoute 3.8.53, Caddy HTTPS, 1.2 of 3.7 GB RAM used). Setup from `infra/server/` (Hetzner CX23, Caddy HTTPS via sslip.io, n8n + Postgres, OmniRoute private, firewall, swap, daily backups)
 - [ ] VPS (~CA$10/month) with n8n + Postgres, Caddy HTTPS, daily off-site backups
 - [ ] Daytona for the Assistant sandbox, or keep it on the laptop
