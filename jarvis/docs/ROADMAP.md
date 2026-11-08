@@ -29,7 +29,9 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 ## Phase 2: JARVIS core and research departments
 - [ ] Data Tables: tasks, approvals, actions, ledger, decisions, products
 - [ ] `llm.call` sub-workflow (router from v0, with fallback chain, persistent ledger, JSON validation)
-- [ ] Telegram bot: approval buttons and alerts; Error Trigger workflow
+- [x] Telegram bot created (owner chat ID 6203634137), `JARVIS Telegram` credential saved in server n8n (2026-11-08)
+- [~] `workflows/jarvis-telegram-v3.json`: owner messages JARVIS on Telegram -> work order reply (owner-only filter; logic tested offline)
+- [ ] Telegram approval buttons (send-and-wait) and alerts; Error Trigger workflow
 - [ ] `jarvis.ceo`: dispatch to managers and a daily report
 - [ ] `ecom.manager` plus the research/finance roles as the funnel in ARCHITECTURE.md §2
 - [ ] Finance 1 unit-economics calculator (code, no AI) with unit tests

@@ -62,10 +62,15 @@ print("wrote jarvis-ceo-v0.json")
 # Multi-provider workflows: a chain of "Use X? -> Call X -> Got X" blocks, falling through on error.
 R = "$('Router (multi-AI)').first().json"
 
-def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme):
-    n = [
-      node("b1", "Start (manual test)", "n8n-nodes-base.manualTrigger", 1, [0, 400], {}),
-      node("b2", "Owner request", "n8n-nodes-base.code", 2, [200, 400], {"jsCode": code("1-owner-request.js")}),
+def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme, front=None, tail=None):
+    # front: (nodes, connections, last_node_name) replacing the manual Start + Owner request
+    # tail:  (nodes, connections, sink_node_name) that receives both the result and the "unavailable" message
+    if front is None:
+        front = ([node("b1", "Start (manual test)", "n8n-nodes-base.manualTrigger", 1, [0, 400], {}),
+                  node("b2", "Owner request", "n8n-nodes-base.code", 2, [200, 400], {"jsCode": code("1-owner-request.js")})],
+                 {"Start (manual test)": {"main": [[{"node": "Owner request", "type": "main", "index": 0}]]}},
+                 "Owner request")
+    n = list(front[0]) + [
       node("b3", "Router (multi-AI)", "n8n-nodes-base.code", 2, [400, 400], {"jsCode": code(router_file)}),
       node("b9", "Parse, cost & log", "n8n-nodes-base.code", 2, [1500, 100], {"jsCode": code("gateway-parse.js")}),
       node("b10", "All AIs unavailable: ask owner", "n8n-nodes-base.code", 2, [1500, 1100], {"jsCode":
@@ -76,11 +81,11 @@ def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme)
           "  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"}),
       node("b11", "README", "n8n-nodes-base.stickyNote", 1, [-40, -160], {"width": 1300, "height": 240, "content": readme}),
     ]
-    c = {
-      "Start (manual test)": {"main": [[{"node": "Owner request", "type": "main", "index": 0}]]},
-      "Owner request": {"main": [[{"node": "Router (multi-AI)", "type": "main", "index": 0}]]},
+    c = dict(front[1])
+    c.update({
+      front[2]: {"main": [[{"node": "Router (multi-AI)", "type": "main", "index": 0}]]},
       "Router (multi-AI)": {"main": [[{"node": f"Use {labels[order[0]]}?", "type": "main", "index": 0}]]},
-    }
+    })
     for i, p in enumerate(order):
         y = 100 + i * 250
         use, call, got = f"Use {labels[p]}?", f"Call {labels[p]}", f"Got {p}"
@@ -103,6 +108,11 @@ def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme)
         c[use] = {"main": [[{"node": call, "type": "main", "index": 0}], [{"node": nxt, "type": "main", "index": 0}]]}
         c[call] = {"main": [[{"node": got, "type": "main", "index": 0}], [{"node": nxt, "type": "main", "index": 0}]]}
         c[got] = {"main": [[{"node": "Parse, cost & log", "type": "main", "index": 0}]]}
+    if tail is not None:
+        n += tail[0]
+        c.update(tail[1])
+        for src in ("Parse, cost & log", "All AIs unavailable: ask owner"):
+            c[src] = {"main": [[{"node": tail[2], "type": "main", "index": 0}]]}
     wf = {"name": wf_name, "nodes": n, "connections": c,
           "settings": {"executionOrder": "v1", "saveManualExecutions": True}, "pinData": {}}
     (here.parent / file_name).write_text(json.dumps(wf, indent=2) + "\n")
@@ -130,3 +140,37 @@ chain_workflow("JARVIS CEO v2 (OmniRoute)", "jarvis-ceo-v2-omniroute.json", "omn
     "Free combo `jarvis-free` first (OmniRoute switches between Gemini/Groq/OpenRouter inside it), paid combo `jarvis-paid` only if free fails, for T3 decisions, or for personal data - and only within your budget.\n"
     "Setup: create a *Header Auth* credential \"OmniRoute\": Name `Authorization`, Value `Bearer <OmniRoute API key>` and select it in both **Call** nodes.\n"
     "Needs `07-setup-omniroute.ps1` and the two combos created in the OmniRoute dashboard.")
+
+# v3: talk to JARVIS from Telegram (owner only), reply in the same chat
+OWNER_CHAT_ID = "6203634137"
+tg_front = (
+  [node("t1", "Telegram Trigger", "n8n-nodes-base.telegramTrigger", 1.2, [-200, 400],
+        {"updates": ["message"], "additionalFields": {}}, webhookId="7d4554fc-391d-40f4-93c5-b218d03c6de6"),
+   node("t2", "Only the owner?", "n8n-nodes-base.if", 2.2, [0, 400], {
+        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                       "conditions": [
+                         {"id": "o1", "leftValue": "={{ String($json.message?.chat?.id ?? '') }}", "rightValue": OWNER_CHAT_ID,
+                          "operator": {"type": "string", "operation": "equals"}},
+                         {"id": "o2", "leftValue": "={{ $json.message?.text ?? '' }}", "rightValue": "",
+                          "operator": {"type": "string", "operation": "notEmpty", "singleValue": True}}],
+                       "combinator": "and"}, "options": {}}),
+   node("t3", "Owner request (Telegram)", "n8n-nodes-base.code", 2, [200, 400], {"jsCode": code("telegram-request.js")})],
+  {"Telegram Trigger": {"main": [[{"node": "Only the owner?", "type": "main", "index": 0}]]},
+   "Only the owner?": {"main": [[{"node": "Owner request (Telegram)", "type": "main", "index": 0}], []]}},
+  "Owner request (Telegram)")
+tg_tail = (
+  [node("t8", "Format reply", "n8n-nodes-base.code", 2, [1750, 400], {"jsCode": code("format-reply.js")}),
+   node("t9", "Reply on Telegram", "n8n-nodes-base.telegram", 1.2, [1950, 400], {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $json.reply_text }}",
+        "additionalFields": {"appendAttribution": False}})],
+  {"Format reply": {"main": [[{"node": "Reply on Telegram", "type": "main", "index": 0}]]}},
+  "Format reply")
+chain_workflow("JARVIS Telegram v3", "jarvis-telegram-v3.json", "omniroute-router.js",
+    ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
+    lambda p: HEADER,
+    "## JARVIS Telegram v3 - talk to JARVIS from your phone\n"
+    "Only messages from the owner's chat ID are answered; everyone else is ignored.\n"
+    "Setup: select **JARVIS Telegram** in *Telegram Trigger* and *Reply on Telegram*, and **OmniRoute** in both *Call* nodes. Save, then switch the workflow to **Active** (Publish).\n"
+    "Only one Telegram trigger per bot can be active at a time.",
+    front=tg_front, tail=tg_tail)
