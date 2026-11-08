@@ -22,7 +22,9 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Optional Path B: `06-migrate-n8n-to-compose.ps1` (not needed now: the container already restarts by itself)
 - [ ] Optional: `.wslconfig` memory limit (after Path B)
 
-**Done when:** `05-verify.ps1` passes, the Assistant runs code, and JARVIS CEO v0 returns a work order costing under 1¢.
+**Phase 1 status:** done on the cloud server (the laptop sandbox is optional and was skipped for RAM).
+
+**Done when (original laptop plan):** `05-verify.ps1` passes, the Assistant runs code, and JARVIS CEO v0 returns a work order costing under 1¢.
 
 ## Phase 2: JARVIS core and research departments
 - [ ] Data Tables: tasks, approvals, actions, ledger, decisions, products
@@ -74,7 +76,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] OmniRoute provider: Groq API key connected and tested (openai/gpt-oss-120b, 0.5 s; default groq/compound not available on the account)
 - [x] OmniRoute combo `jarvis-free` (Priority: Groq gpt-oss-120b, then Gemini 3.8 Flash) and API key `n8n-jarvis` (no management access) created 2026-11-07
 - [ ] OmniRoute: add backups to combo (Groq gpt-oss-20b, Gemini 2.5 Flash Lite); `jarvis-paid` combo after adding OpenAI key
-- [ ] Server n8n: Header Auth credential "OmniRoute" + import `jarvis-ceo-v2-omniroute.json` and test
+- [x] **First JARVIS agent live on the server (2026-11-07):** `JARVIS CEO v2 (OmniRoute)` ran end to end. The free combo answered (Groq openai/gpt-oss-120b, 306 in / 388 out tokens, $0) with a valid work order: department ecommerce, task_type research, needs_owner_approval false, data_needed listed (no invented data)
 - [ ] Restart server once for pending kernel update (`reboot`)
 - [x] Server live 2026-11-07: Hetzner CX23 Helsinki, 2.29.114.208, https://n8n.2-29-114-208.sslip.io (n8n 2.45.7 + Postgres, OmniRoute 3.8.53, Caddy HTTPS, 1.2 of 3.7 GB RAM used). Setup from `infra/server/` (Hetzner CX23, Caddy HTTPS via sslip.io, n8n + Postgres, OmniRoute private, firewall, swap, daily backups)
 - [ ] VPS (~CA$10/month) with n8n + Postgres, Caddy HTTPS, daily off-site backups
