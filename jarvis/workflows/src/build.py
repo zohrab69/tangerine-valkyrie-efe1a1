@@ -196,3 +196,51 @@ chain_workflow("JARVIS Telegram v4 (approvals)", "jarvis-telegram-v4.json", "omn
     "Setup: select **JARVIS Telegram** in *Telegram Trigger*, *Ask owner to approve* and *Reply on Telegram*, and **OmniRoute** in both *Call* nodes. Save, then switch the workflow to **Active** (Publish).\n"
     "Only one Telegram trigger per bot can be active at a time: unpublish v3 before publishing v4.",
     front=tg_front, tail=tg_tail)
+
+# Voice v1: the JARVIS screen (jarvis/ui) -> Caddy (password + secret header) -> this webhook.
+# Answers the screen at once; approvals continue on Telegram with buttons.
+voice_front = (
+  [node("w1", "Webhook (JARVIS screen)", "n8n-nodes-base.webhook", 2, [-200, 400],
+        {"httpMethod": "POST", "path": "jarvis-voice", "authentication": "headerAuth",
+         "responseMode": "responseNode", "options": {}}, webhookId="875474be-d6a5-431e-a5fc-c941329ca912"),
+   node("w2", "Voice request", "n8n-nodes-base.code", 2, [200, 400], {"jsCode": code("voice-request.js")})],
+  {"Webhook (JARVIS screen)": {"main": [[{"node": "Voice request", "type": "main", "index": 0}]]}},
+  "Voice request")
+voice_tail = (
+  [node("v5", "Approval rule", "n8n-nodes-base.code", 2, [1700, 100], {"jsCode": code("approval-rule.js")}),
+   node("v6", "Voice answer", "n8n-nodes-base.code", 2, [1900, 300], {"jsCode": code("voice-answer.js")}),
+   node("v7", "Answer the screen", "n8n-nodes-base.respondToWebhook", 1.1, [2100, 300],
+        {"respondWith": "json", "responseBody": "={{ JSON.stringify($json.voice_response) }}", "options": {}}),
+   node("v8", "Needs owner approval?", "n8n-nodes-base.if", 2.2, [2300, 300], {
+        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                       "conditions": [{"id": "va1", "leftValue": "={{ $json.needs_approval === true }}", "rightValue": "",
+                                       "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                       "combinator": "and"}, "options": {}}),
+   node("v9", "Ask owner to approve", "n8n-nodes-base.telegram", 1.2, [2550, 150], {
+        "operation": "sendAndWait",
+        "chatId": OWNER_CHAT_ID,
+        "message": "={{ $json.approval_text }}",
+        "responseType": "approval",
+        "approvalOptions": {"values": {"approvalType": "double", "approveLabel": "✅ Approve", "disapproveLabel": "❌ Decline"}},
+        "options": {"limitWaitTime": {"values": {"limitType": "afterTimeInterval", "resumeAmount": 48, "resumeUnit": "hours"}},
+                    "appendAttribution": False}}, webhookId="a72e4a90-320c-4628-b7a8-41ba16a2a733"),
+   node("v10", "Record decision", "n8n-nodes-base.code", 2, [2800, 150], {"jsCode": code("record-decision.js")}),
+   node("v11", "Format reply", "n8n-nodes-base.code", 2, [3000, 150], {"jsCode": code("format-reply.js")}),
+   node("v12", "Reply on Telegram", "n8n-nodes-base.telegram", 1.2, [3200, 150], {
+        "chatId": OWNER_CHAT_ID, "text": "={{ $json.reply_text }}",
+        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}})],
+  {"Approval rule": {"main": [[{"node": "Voice answer", "type": "main", "index": 0}]]},
+   "Voice answer": {"main": [[{"node": "Answer the screen", "type": "main", "index": 0}]]},
+   "Answer the screen": {"main": [[{"node": "Needs owner approval?", "type": "main", "index": 0}]]},
+   "Needs owner approval?": {"main": [[{"node": "Ask owner to approve", "type": "main", "index": 0}], []]},
+   "Ask owner to approve": {"main": [[{"node": "Record decision", "type": "main", "index": 0}]]},
+   "Record decision": {"main": [[{"node": "Format reply", "type": "main", "index": 0}]]},
+   "Format reply": {"main": [[{"node": "Reply on Telegram", "type": "main", "index": 0}]]}},
+  ("Approval rule", "Voice answer"))
+chain_workflow("JARVIS Voice v1 (screen)", "jarvis-voice-v1.json", "omniroute-router.js",
+    ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
+    lambda p: HEADER,
+    "## JARVIS Voice v1 - the JARVIS screen\n"
+    "The page at https://jarvis.<server>.sslip.io (password protected) sends your words here. JARVIS answers the screen at once; approvals go to your Telegram with buttons.\n"
+    "Setup: *Webhook* -> Header Auth credential **JARVIS screen key** (Name X-Jarvis-Key, Value = VOICE_SECRET printed by voice-setup.sh). **OmniRoute** in both *Call* nodes. **JARVIS Telegram** in *Ask owner to approve* and *Reply on Telegram*. Save, then Publish.",
+    front=voice_front, tail=voice_tail)

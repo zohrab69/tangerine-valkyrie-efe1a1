@@ -1,0 +1,647 @@
+{
+  "name": "JARVIS Voice v1 (screen)",
+  "nodes": [
+    {
+      "id": "w1",
+      "name": "Webhook (JARVIS screen)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-voice",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "875474be-d6a5-431e-a5fc-c941329ca912"
+    },
+    {
+      "id": "w2",
+      "name": "Voice request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Request from the JARVIS screen (voice or typed) -> one task, same format as Telegram.\n// The page is password-protected by Caddy and calls this webhook with a secret header.\nconst body = $input.first().json.body || {};\nconst owner_message = String(body.text || '').trim().slice(0, 2000);\nconst lang = body.lang === 'fr' ? 'fr' : 'en';\nreturn [{\n  json: {\n    task_id: 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),\n    created_at: new Date().toISOString(),\n    source: 'screen',\n    lang,\n    business: 'jarvis',\n    agent: 'jarvis_ceo_dispatcher',\n    task_type: 'classify',\n    owner_message,\n    instructions: [\n      'You are JARVIS, the AI chief operating officer of the owner\\'s businesses. Departments:',\n      'ecommerce (Shopify + Amazon Canada: research, finance, listings, fulfillment),',\n      'marketing (product videos/posts for YouTube Shorts, TikTok, Instagram),',\n      'veraclean (cleaning company in Montreal/Laval: leads, outreach, booking, reports),',\n      'content_channel (independent YouTube/TikTok/Instagram channel),',\n      'trading (PAUSED: never assign work to it).',\n      'The owner is speaking to you on the JARVIS screen. Reply with JSON only, with keys:',\n      'spoken_reply (1 to 3 short, natural sentences to say out loud, in ' + (lang === 'fr' ? 'French' : 'English') + ', calm and concise; never claim work is done, data was found or money was spent unless it really was),',\n      'department, task_type, priority (low|normal|high), summary,',\n      'steps (array of max 5 short strings, each naming the agent role that does it),',\n      'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',\n      'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).',\n      'If the message is small talk or a simple question, still answer in spoken_reply and use department \"jarvis\" with an empty steps array.'\n    ].join(' ')\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "b3",
+      "name": "Router (multi-AI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// Router for the OmniRoute version. OmniRoute does the provider fallback inside each combo;\n// this node only decides FREE combo vs PAID combo and enforces your budget on paid calls.\n// Combo names must match what you create in the OmniRoute dashboard (Settings > Combos).\nconst OMNI = 'http://omniroute:20128/v1/chat/completions';\nconst COMBOS = {\n  free: 'jarvis-free', // Gemini / Groq / OpenRouter free models, API keys only\n  paid: 'jarvis-paid', // OpenAI (paid) - used for T3 decisions, personal data, or when free is unavailable\n};\n// Paid price used for the budget estimate (USD per 1M tokens) - set to the most expensive model in jarvis-paid.\nconst PAID_PRICE = { in: 1.25, out: 10.0 };\nconst USD_TO_CAD = 1.40;\nconst CAPS = { daily_cad: 2.00, monthly_cad: 40, single_call_cad: 0.25 };\nconst TIER = {\n  classify: 'T1', extract: 'T1', format: 'T1', summarize_short: 'T1', customer_reply_draft: 'T1',\n  research_synthesis: 'T2', marketing_copy: 'T2', video_script: 'T2', competitor_comparison: 'T2',\n  lead_qualification: 'T2', daily_report: 'T2',\n  product_financials: 'T3', independent_review: 'T3', strategy: 'T3',\n};\nconst MAX_TOKENS = { T1: 800, T2: 2000, T3: 4000 };\n\nconst task = $input.first().json;\nconst tier = TIER[task.task_type] || 'T2';\nconst store = $getWorkflowStaticData('global');\nconst today = new Date().toISOString().slice(0, 10), month = today.slice(0, 7);\nstore.ledger = store.ledger || { day: today, month, day_cad: 0, month_cad: 0, calls: {} };\nif (store.ledger.day !== today) { store.ledger.day = today; store.ledger.day_cad = 0; store.ledger.calls = {}; }\nif (store.ledger.month !== month) { store.ledger.month = month; store.ledger.month_cad = 0; }\n\nconst messages = [{ role: 'system', content: task.instructions }, { role: 'user', content: task.owner_message }];\nconst body = model => ({ model, messages, max_tokens: MAX_TOKENS[tier], response_format: { type: 'json_object' } });\nconst calls = {}, skipped = [];\n\nif (tier === 'T3') skipped.push('free: T3 decisions use the paid combo');\nelse if (task.contains_personal_data) skipped.push('free: personal data never goes to free tiers');\nelse calls.free = { url: OMNI, body: body(COMBOS.free), est_cad: 0, price: { in: 0, out: 0 } };\n\nconst inTok = Math.ceil((task.instructions.length + task.owner_message.length) / 4) + 50;\nconst est = +(((inTok * PAID_PRICE.in + MAX_TOKENS[tier] * PAID_PRICE.out) / 1e6) * USD_TO_CAD).toFixed(5);\nif (est > CAPS.single_call_cad) skipped.push('paid: call estimate over cap');\nelse if (store.ledger.day_cad + est > CAPS.daily_cad) skipped.push('paid: daily budget reached');\nelse if (store.ledger.month_cad + est > CAPS.monthly_cad) skipped.push('paid: monthly budget reached');\nelse calls.paid = { url: OMNI, body: body(COMBOS.paid), est_cad: est, price: PAID_PRICE };\n\nreturn [{ json: { ...task, tier, order: ['free', 'paid'].filter(k => calls[k]), calls, skipped,\n                  any_available: Object.keys(calls).length > 0 } }];\n"
+      }
+    },
+    {
+      "id": "b9",
+      "name": "Parse, cost & log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Parse whichever provider answered (OpenAI-compatible chat format), record cost and usage.\nconst routed = $('Router (multi-AI)').first().json;\nconst res = $input.first().json;\nconst provider = res._provider;\nconst call = routed.calls[provider];\n\nlet text = (res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || '';\ntext = text.replace(/^\\s*```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/, '');\nlet decision = null, parse_error = null;\ntry { decision = JSON.parse(text); } catch (e) { parse_error = 'Answer was not valid JSON: ' + e.message; }\n\nconst u = res.usage || {};\nconst inTok = u.prompt_tokens || 0, outTok = u.completion_tokens || 0;\nconst cost_cad = +(((inTok * call.price.in + outTok * call.price.out) / 1e6) * 1.40).toFixed(6);\n\nconst store = $getWorkflowStaticData('global');\nif (store.ledger) {\n  store.ledger.calls[provider] = (store.ledger.calls[provider] || 0) + 1;\n  store.ledger.day_cad += cost_cad; store.ledger.month_cad += cost_cad;\n}\nreturn [{ json: {\n  task_id: routed.task_id, answered_by: provider, model: res.model || call.body.model, tier: routed.tier,\n  decision, parse_error, usage: { input_tokens: inTok, output_tokens: outTok },\n  cost_cad, cost_note: provider === 'openai' ? 'Estimate from list prices.' : 'Free tier: no charge.',\n  skipped_before: routed.skipped, ledger_after: store.ledger || null, logged_at: new Date().toISOString(),\n} }];\n"
+      }
+    },
+    {
+      "id": "b10",
+      "name": "All AIs unavailable: ask owner",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        1100
+      ],
+      "parameters": {
+        "jsCode": "// No AI could answer (not set up, free limits used, budget reached, or all errored).\n// Phase 2 sends this to the owner on Telegram.\nconst r = $('Router (multi-AI)').first().json;\nreturn [{ json: { task_id: r.task_id, status: 'blocked_no_ai', skipped: r.skipped,\n  message_to_owner: `JARVIS could not run task ${r.task_id}: no AI available (${r.skipped.join('; ')}). Check keys/limits or raise the budget.` } }];\n"
+      }
+    },
+    {
+      "id": "b11",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -160
+      ],
+      "parameters": {
+        "width": 1300,
+        "height": 240,
+        "content": "## JARVIS Voice v1 - the JARVIS screen\nThe page at https://jarvis.<server>.sslip.io (password protected) sends your words here. JARVIS answers the screen at once; approvals go to your Telegram with buttons.\nSetup: *Webhook* -> Header Auth credential **JARVIS screen key** (Name X-Jarvis-Key, Value = VOICE_SECRET printed by voice-setup.sh). **OmniRoute** in both *Call* nodes. **JARVIS Telegram** in *Ask owner to approve* and *Reply on Telegram*. Save, then Publish."
+      }
+    },
+    {
+      "id": "u0",
+      "name": "Use OmniRoute free combo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "u0c",
+              "leftValue": "={{ !!$('Router (multi-AI)').first().json.calls.free }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h0",
+      "name": "Call OmniRoute free combo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Router (multi-AI)').first().json.calls.free.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.free.body) }}",
+        "options": {
+          "timeout": 90000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "g0",
+      "name": "Got free",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1150,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g0a",
+              "name": "_provider",
+              "value": "free",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "u1",
+      "name": "Use OmniRoute paid combo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        650,
+        350
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "u1c",
+              "leftValue": "={{ !!$('Router (multi-AI)').first().json.calls.paid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h1",
+      "name": "Call OmniRoute paid combo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Router (multi-AI)').first().json.calls.paid.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Router (multi-AI)').first().json.calls.paid.body) }}",
+        "options": {
+          "timeout": 90000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "g1",
+      "name": "Got paid",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1150,
+        350
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1a",
+              "name": "_provider",
+              "value": "paid",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "v5",
+      "name": "Approval rule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Approval rule: the AI's needs_owner_approval can only be made STRICTER here, never relaxed.\n// Mirrors jarvis/config/approval-policy.json (\"owner_approval_required\").\nconst j = $input.first().json;\nconst d = j.decision || {};\nconst task = $('Router (multi-AI)').first().json;\nconst text = [task.owner_message, d.summary, ...(Array.isArray(d.steps) ? d.steps : [])]\n  .map(x => (typeof x === 'string' ? x : JSON.stringify(x || ''))).join(' ').toLowerCase();\n\nconst RULES = [\n  [/\\b(launch|publish|go live|list (it|them|on)|put (it|them) on)\\b/, 'launches or publishes a product/listing'],\n  [/\\b(buy|purchase|pay|spend|order samples?|place an order|invoice)\\b/, 'spends money'],\n  [/\\b(ads?|advertis\\w*|campaign budget|boost)\\b/, 'advertising'],\n  [/\\b(subscri\\w+|upgrade (plan|to)|paid plan)\\b/, 'new subscription / recurring charge'],\n  [/\\b(contract|sign|agreement|quote outside|discount)\\b/, 'contract, signature or unusual price'],\n  [/\\b(refund|chargeback|dispute)\\b/, 'refund or dispute'],\n  [/\\b(email|contact|message|call|reach out|outreach)\\b.{0,40}\\b(prospects?|leads?|clients?|customers?|managers?|owners?|companies)\\b/, 'contacts new people (CASL)'],\n  [/\\b(change (the )?price|price change|raise prices?|lower prices?)\\b/, 'price change'],\n  [/\\b(api key|password|permission|account settings?)\\b/, 'account / security change'],\n];\nconst reasons = RULES.filter(([re]) => re.test(text)).map(([, why]) => why);\nconst money = text.match(/\\$?\\s?(\\d{2,})\\s?(cad|\\$|dollars?)/);\nif (money && Number(money[1]) > 25 && /\\b(spend|pay|buy|budget|cost us)\\b/.test(text)) reasons.push('expense above 25 CAD');\n\nconst aiSaysYes = d.needs_owner_approval === true;\nconst needs = !j.message_to_owner && !!j.decision && (aiSaysYes || reasons.length > 0);\nconst why = [...new Set([...(aiSaysYes && d.approval_reason ? [d.approval_reason] : []), ...reasons])];\n\n// Telegram \"send and wait\" always uses legacy Markdown: escape its special characters.\nconst md = t => String(t).replace(/([_*`\\[])/g, '\\\\$1');\nconst steps = Array.isArray(d.steps) ? d.steps : [];\nconst approval_text = [\n  '*JARVIS needs your approval*',\n  'Task: ' + md(j.task_id || ''),\n  'Request: ' + md(task.owner_message || ''),\n  'Plan: ' + md(d.summary || ''),\n  ...steps.slice(0, 5).map((s, i) => md((i + 1) + '. ' + (typeof s === 'string' ? s : JSON.stringify(s)))),\n  'Why approval: ' + md(why.join('; ') || 'policy'),\n  'No answer within 48 hours = rejected.',\n].join('\\n').slice(0, 3500);\n\nreturn [{ json: { ...j, needs_approval: needs, approval_reasons: why, approval_text, approval_status: needs ? 'pending' : 'not_needed' } }];\n"
+      }
+    },
+    {
+      "id": "v6",
+      "name": "Voice answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Build what the JARVIS screen shows and says. Runs for answers and for \"no AI available\".\nconst j = $input.first().json;\nconst fr = ($('Voice request').first().json.lang || 'en') === 'fr';\nlet spoken, ok = true;\nif (j.message_to_owner || !j.decision) {\n  ok = false;\n  spoken = fr ? \"D\u00e9sol\u00e9, je n'ai pas pu obtenir de r\u00e9ponse d'une IA pour le moment. R\u00e9essayez dans une minute.\"\n              : \"Sorry, I couldn't get an answer from any AI right now. Please try again in a minute.\";\n} else {\n  spoken = String(j.decision.spoken_reply || j.decision.summary || (fr ? \"C'est not\u00e9.\" : 'Noted.')).slice(0, 600);\n  if (j.needs_approval) spoken += fr ? \" Cela demande votre approbation : je vous ai envoy\u00e9 la demande sur Telegram.\"\n                                     : \" This needs your approval, so I've sent the request to your Telegram.\";\n}\nconst d = j.decision || {};\nreturn [{ json: { ...j, voice_response: {\n  ok, spoken,\n  task_id: j.task_id || null,\n  department: d.department || null,\n  priority: d.priority || null,\n  summary: d.summary || null,\n  steps: Array.isArray(d.steps) ? d.steps.slice(0, 5).map(s => (typeof s === 'string' ? s : JSON.stringify(s))) : [],\n  data_needed: Array.isArray(d.data_needed) ? d.data_needed.slice(0, 6) : [],\n  needs_approval: !!j.needs_approval,\n  approval_reasons: j.approval_reasons || [],\n  answered_by: j.answered_by || null,\n  model: j.model || null,\n  cost_cad: typeof j.cost_cad === 'number' ? j.cost_cad : 0,\n  error: ok ? null : (j.message_to_owner || j.parse_error || 'no answer'),\n} } }];\n"
+      }
+    },
+    {
+      "id": "v7",
+      "name": "Answer the screen",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2100,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.voice_response) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "v8",
+      "name": "Needs owner approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2300,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "va1",
+              "leftValue": "={{ $json.needs_approval === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "v9",
+      "name": "Ask owner to approve",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2550,
+        150
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "6203634137",
+        "message": "={{ $json.approval_text }}",
+        "responseType": "approval",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "\u2705 Approve",
+            "disapproveLabel": "\u274c Decline"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 48,
+              "resumeUnit": "hours"
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "a72e4a90-320c-4628-b7a8-41ba16a2a733"
+    },
+    {
+      "id": "v10",
+      "name": "Record decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// After the owner taps Approve/Decline (or 48 h pass with no answer).\nconst before = $('Approval rule').first().json;\nconst r = ($input.first().json || {}).data || {};\nconst status = r.approved === true ? 'approved' : r.approved === false ? 'rejected' : 'expired_rejected';\nreturn [{ json: { ...before, approval_status: status, approval_responded_at: r.respondedAt || new Date().toISOString() } }];\n"
+      }
+    },
+    {
+      "id": "v11",
+      "name": "Format reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Turn JARVIS's result (or a failure) into a short Telegram message for the owner.\nconst j = $input.first().json;\nlet lines;\nif (j.message_to_owner) {\n  lines = [j.message_to_owner];\n} else if (!j.decision) {\n  lines = ['JARVIS: I could not read the AI answer for task ' + j.task_id + ' (' + (j.parse_error || 'empty answer') + '). Please try again.'];\n} else {\n  const d = j.decision;\n  const steps = Array.isArray(d.steps) ? d.steps : [];\n  const data = Array.isArray(d.data_needed) ? d.data_needed : [];\n  lines = [\n    'JARVIS work order ' + j.task_id,\n    'Department: ' + (d.department || '?') + ' | Priority: ' + (d.priority || '?'),\n    'Summary: ' + (d.summary || ''),\n    'Steps:',\n    ...steps.map((s, i) => (i + 1) + '. ' + (typeof s === 'string' ? s : JSON.stringify(s))),\n    'Needs your approval: ' + (j.needs_approval ? 'YES - ' + (j.approval_reasons || []).join('; ') : 'no'),\n    'Data needed: ' + (data.length ? data.join('; ') : 'none'),\n    'Answered by: ' + j.answered_by + ' (' + j.model + '), cost: ' + j.cost_cad + ' CAD',\n  ];\n  const STATUS = {\n    approved: 'Your decision: APPROVED. JARVIS will continue with this plan.',\n    rejected: 'Your decision: REJECTED. JARVIS will not do this.',\n    expired_rejected: 'No answer within 48 hours: treated as REJECTED.',\n  };\n  if (STATUS[j.approval_status]) lines.push(STATUS[j.approval_status]);\n}\n// Sent with parse_mode HTML: escape the three characters HTML treats specially.\nconst esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nreturn [{ json: { reply_text: esc(lines.join('\\n')).slice(0, 4000) } }];\n"
+      }
+    },
+    {
+      "id": "v12",
+      "name": "Reply on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3200,
+        150
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.reply_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook (JARVIS screen)": {
+      "main": [
+        [
+          {
+            "node": "Voice request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice request": {
+      "main": [
+        [
+          {
+            "node": "Router (multi-AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router (multi-AI)": {
+      "main": [
+        [
+          {
+            "node": "Use OmniRoute free combo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use OmniRoute free combo?": {
+      "main": [
+        [
+          {
+            "node": "Call OmniRoute free combo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OmniRoute paid combo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OmniRoute free combo": {
+      "main": [
+        [
+          {
+            "node": "Got free",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OmniRoute paid combo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got free": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use OmniRoute paid combo?": {
+      "main": [
+        [
+          {
+            "node": "Call OmniRoute paid combo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All AIs unavailable: ask owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OmniRoute paid combo": {
+      "main": [
+        [
+          {
+            "node": "Got paid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All AIs unavailable: ask owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got paid": {
+      "main": [
+        [
+          {
+            "node": "Parse, cost & log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval rule": {
+      "main": [
+        [
+          {
+            "node": "Voice answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice answer": {
+      "main": [
+        [
+          {
+            "node": "Answer the screen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer the screen": {
+      "main": [
+        [
+          {
+            "node": "Needs owner approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs owner approval?": {
+      "main": [
+        [
+          {
+            "node": "Ask owner to approve",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Ask owner to approve": {
+      "main": [
+        [
+          {
+            "node": "Record decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record decision": {
+      "main": [
+        [
+          {
+            "node": "Format reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format reply": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse, cost & log": {
+      "main": [
+        [
+          {
+            "node": "Approval rule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All AIs unavailable: ask owner": {
+      "main": [
+        [
+          {
+            "node": "Voice answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}

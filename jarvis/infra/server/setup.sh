@@ -58,6 +58,7 @@ echo "==> App folder and secrets"
 mkdir -p "$APP/backups"
 cp compose.yml "$APP/compose.yml"
 cp backup.sh "$APP/backup.sh"; chmod 700 "$APP/backup.sh"
+cp caddy-config.sh "$APP/caddy-config.sh"; mkdir -p "$APP/jarvis-ui"
 if [ ! -f "$APP/.env" ]; then
   IP=$(curl -fsS -4 https://api.ipify.org || hostname -I | awk '{print $1}')
   sec() { openssl rand -hex 32; }
@@ -78,6 +79,8 @@ ENV
 else
   echo "   $APP/.env exists - keeping secrets"
 fi
+
+bash "$APP/caddy-config.sh"
 
 echo "==> Starting JARVIS (first time: a few minutes)"
 cd "$APP"

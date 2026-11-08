@@ -47,3 +47,14 @@ store's domain later.
 | Status | `ssh root@$IP "cd /opt/jarvis && docker compose ps && free -h"` |
 | Backup now | `ssh root@$IP /opt/jarvis/backup.sh` |
 | Logs | `ssh root@$IP "cd /opt/jarvis && docker compose logs --tail 50 n8n"` |
+
+## JARVIS screen (voice)
+A password-protected page at `https://jarvis.<ip-with-dashes>.sslip.io`, with hold-to-talk (Chrome or Edge), spoken replies, conversation, today's stats and pending approvals.
+```powershell
+cd $HOME\jarvis-repo; git pull
+scp -r $HOME\jarvis-repo\jarvis\infra\server\* root@${IP}:/root/jarvis-server/
+ssh root@$IP "bash /root/jarvis-server/voice-setup.sh"
+```
+The script prints the address, the username (`owner`), a new password, and the key for the n8n Webhook credential. Save them in your password manager.
+Then import `workflows/jarvis-voice-v1.json` in n8n, set its credentials and publish it.
+Voice recognition uses Chrome's built-in service, which sends your audio to Google. Typing always works.

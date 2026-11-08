@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<style>
+  :root{
+    --bg:#05080d; --bg2:#0a1220; --panel:rgba(12,24,40,.62); --line:rgba(80,200,255,.18);
+    --ink:#d8ecf7; --muted:#7f9bb0; --core:#3fd3ff; --core2:#1b8fd1; --warn:#ffb547; --bad:#ff5d6c; --ok:#4be3a2;
+    --glow:0 0 24px rgba(63,211,255,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 800px at 50% 42%,#0b1a2c 0%,var(--bg) 62%);color:var(--ink);
+       font:15px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;overflow:hidden}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;
+       background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px)}
+  .grid{display:grid;grid-template-columns:minmax(260px,1fr) minmax(360px,1.25fr) minmax(260px,1fr);
+        grid-template-rows:auto 1fr auto;gap:18px;height:100%;padding:18px 22px}
+  header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;
+         letter-spacing:.22em;font-size:12px;color:var(--muted);text-transform:uppercase}
+  header .brand{color:var(--core);font-weight:600;letter-spacing:.42em;font-size:14px;text-shadow:var(--glow)}
+  header .right{display:flex;gap:18px;align-items:center}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:8px;vertical-align:1px}
+  .dot.ok{background:var(--ok);box-shadow:0 0 10px var(--ok)} .dot.bad{background:var(--bad);box-shadow:0 0 10px var(--bad)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+         backdrop-filter:blur(6px);min-height:0;display:flex;flex-direction:column}
+  .panel h2{margin:0 0 10px;font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--core);font-weight:600}
+  .col{display:flex;flex-direction:column;gap:18px;min-height:0}
+  .scroll{overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-color:var(--core2) transparent}
+  #log .msg{margin:0 0 12px;padding-left:10px;border-left:2px solid var(--line)}
+  #log .who{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+  #log .me{border-left-color:var(--warn)} #log .me .who{color:var(--warn)}
+  #log .jv .who{color:var(--core)}
+  #log .meta{font-size:12px;color:var(--muted);margin-top:4px}
+  #log ol{margin:4px 0 0 18px;padding:0;font-size:13px;color:#b9d3e3}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .stat b{font-weight:600;color:#fff}
+  .appr{padding:10px 12px;margin-bottom:10px;border:1px solid rgba(255,181,71,.35);border-radius:10px;background:rgba(255,181,71,.07)}
+  .appr .t{font-size:13px} .appr .r{font-size:12px;color:var(--warn);margin-top:3px}
+  .empty{color:var(--muted);font-size:13px}
+  /* core */
+  .center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;gap:18px}
+  .core{position:relative;width:min(46vh,420px);aspect-ratio:1;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+  .core svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .r1{animation:spin 38s linear infinite;transform-origin:50% 50%}
+  .r2{animation:spin 22s linear infinite reverse;transform-origin:50% 50%}
+  .r3{animation:spin 60s linear infinite;transform-origin:50% 50%}
+  .heart{transform-origin:50% 50%;transition:transform .25s ease}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes breathe{0%,100%{opacity:.75}50%{opacity:1}}
+  @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.07)}100%{transform:scale(1)}}
+  .core .heart{animation:breathe 4s ease-in-out infinite}
+  .core.listening .heart{animation:pulse .9s ease-in-out infinite}
+  .core.listening{--core:#7cf0ff}
+  .core.thinking .r2{animation-duration:3.5s}
+  .core.thinking .r1{animation-duration:8s}
+  .core.speaking .heart{animation:pulse .45s ease-in-out infinite}
+  .core.error{--core:var(--bad)}
+  .state{font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--core);text-shadow:var(--glow);min-height:18px}
+  .heard{min-height:44px;max-width:560px;text-align:center;font-size:17px;color:#e9f6ff}
+  .heard.interim{color:var(--muted);font-style:italic}
+  .say{max-width:600px;text-align:center;font-size:18px;color:#bfe9ff;min-height:28px}
+  /* controls */
+  footer{grid-column:1/-1;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+  button,.input{font:inherit;color:var(--ink);background:rgba(12,30,50,.8);border:1px solid var(--line);
+         border-radius:999px;padding:10px 16px}
+  button{cursor:pointer;letter-spacing:.06em} button:hover{border-color:var(--core);box-shadow:var(--glow)}
+  button.on{border-color:var(--core);color:var(--core)}
+  #talk{padding:12px 26px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--core);border-color:var(--core)}
+  #talk.active{background:var(--core);color:#03141f}
+  .input{width:min(520px,60vw);border-radius:999px;outline:none} .input:focus{border-color:var(--core)}
+  .hint{font-size:12px;color:var(--muted);width:100%;text-align:center}
+  @media (max-width:980px){
+    body{overflow:auto}
+    .grid{grid-template-columns:1fr;height:auto;padding:14px 16px}
+    .col.left{order:3} .col.right{order:2}
+    .core{width:min(78vw,360px)}
+  }
+</style>
+</head>
+<body>
+<div class="grid">
+  <header>
+    <span class="brand">J.A.R.V.I.S.</span>
+    <span id="clock">--:--</span>
+    <span class="right"><span><span id="netdot" class="dot"></span><span id="net">checking</span></span><span id="date"></span></span>
+  </header>
+
+  <section class="col left">
+    <div class="panel" style="flex:1">
+      <h2>Conversation</h2>
+      <div id="log" class="scroll"><p class="empty">Hold the space bar (or the TALK button) and speak.</p></div>
+    </div>
+  </section>
+
+  <section class="center">
+    <div id="core" class="core" title="Hold to talk" aria-label="Hold to talk">
+      <svg viewBox="0 0 400 400" aria-hidden="true">
+        <defs>
+          <radialGradient id="g" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity=".95"/>
+            <stop offset="22%" stop-color="var(--core)" stop-opacity=".9"/>
+            <stop offset="60%" stop-color="var(--core2)" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="var(--core2)" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g class="r3" fill="none" stroke="var(--core)" stroke-opacity=".35">
+          <circle cx="200" cy="200" r="190" stroke-width="1"/>
+          <circle cx="200" cy="200" r="182" stroke-width="6" stroke-dasharray="2 10"/>
+        </g>
+        <g class="r1" fill="none" stroke="var(--core)">
+          <circle cx="200" cy="200" r="160" stroke-width="2" stroke-opacity=".55" stroke-dasharray="180 40 60 40 120 40"/>
+          <circle cx="200" cy="200" r="148" stroke-width="10" stroke-opacity=".18" stroke-dasharray="4 6"/>
+        </g>
+        <g class="r2" fill="none" stroke="var(--core)">
+          <circle cx="200" cy="200" r="122" stroke-width="3" stroke-opacity=".8" stroke-dasharray="60 24 14 24"/>
+          <circle cx="200" cy="200" r="108" stroke-width="1" stroke-opacity=".5"/>
+        </g>
+        <g class="heart">
+          <circle cx="200" cy="200" r="96" fill="url(#g)"/>
+          <circle cx="200" cy="200" r="52" fill="none" stroke="#e8fbff" stroke-opacity=".75" stroke-width="2"/>
+          <circle cx="200" cy="200" r="30" fill="#e8fbff" fill-opacity=".85"/>
+        </g>
+      </svg>
+    </div>
+    <div id="state" class="state">standby</div>
+    <div id="heard" class="heard"></div>
+    <div id="say" class="say"></div>
+  </section>
+
+  <section class="col right">
+    <div class="panel">
+      <h2>Today</h2>
+      <div class="stat"><span>Requests</span><b id="sReq">0</b></div>
+      <div class="stat"><span>AI cost (CAD)</span><b id="sCost">0.00</b></div>
+      <div class="stat"><span>Last AI</span><b id="sModel">—</b></div>
+      <div class="stat"><span>Approvals sent</span><b id="sAppr">0</b></div>
+    </div>
+    <div class="panel" style="flex:1">
+      <h2>Waiting for your approval</h2>
+      <div id="appr" class="scroll"><p class="empty">Nothing waiting. Approvals arrive on your Telegram with Approve / Decline buttons.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <button id="talk" type="button">Hold to talk</button>
+    <input id="text" class="input" placeholder="…or type to JARVIS and press Enter" autocomplete="off">
+    <button id="lang" type="button" title="Language">EN</button>
+    <button id="mute" type="button" class="on" title="Voice replies">Voice on</button>
+    <button id="full" type="button" title="Full screen">⛶</button>
+    <div id="hint" class="hint">Space = hold to talk · Enter = send typed text · Esc = stop speaking</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = { get(k, d) { try { const v = localStorage.getItem('jarvis.' + k); return v === null ? d : v; } catch { return d; } },
+                  set(k, v) { try { localStorage.setItem('jarvis.' + k, v); } catch {} } };
+  const core = $('core'), state = $('state'), heard = $('heard'), say = $('say'), log = $('log');
+  let lang = store.get('lang', 'en'), voiceOn = store.get('voice', '1') === '1', busy = false;
+  let stats = { req: 0, cost: 0, appr: 0 };
+
+  // ---------- UI helpers ----------
+  const setState = (s, label) => { core.className = 'core ' + s; state.textContent = label || s; };
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function addMsg(who, text, extra) {
+    const e = log.querySelector('.empty'); if (e) e.remove();
+    const div = document.createElement('div');
+    div.className = 'msg ' + (who === 'You' ? 'me' : 'jv');
+    div.innerHTML = '<div class="who">' + esc(who) + ' · ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</div><div>' + esc(text) + '</div>' + (extra || '');
+    log.appendChild(div); log.scrollTop = log.scrollHeight;
+  }
+  function tick() {
+    const d = new Date();
+    $('clock').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    $('date').textContent = d.toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  setInterval(tick, 1000); tick();
+  const applyLang = () => { $('lang').textContent = lang.toUpperCase(); $('text').placeholder = lang === 'fr' ? '…ou écrivez à JARVIS puis Entrée' : '…or type to JARVIS and press Enter'; };
+  const applyVoice = () => { $('mute').textContent = voiceOn ? 'Voice on' : 'Voice off'; $('mute').classList.toggle('on', voiceOn); };
+  applyLang(); applyVoice();
+
+  // ---------- server health ----------
+  async function health() {
+    try { const r = await fetch('api/health', { cache: 'no-store' }); const ok = r.ok;
+      $('netdot').className = 'dot ' + (ok ? 'ok' : 'bad'); $('net').textContent = ok ? 'server online' : 'server error ' + r.status;
+    } catch { $('netdot').className = 'dot bad'; $('net').textContent = 'offline'; }
+  }
+  health(); setInterval(health, 60000);
+
+  // ---------- speaking ----------
+  let voices = [];
+  const loadVoices = () => { voices = (window.speechSynthesis && speechSynthesis.getVoices()) || []; };
+  if (window.speechSynthesis) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  function pickVoice() {
+    const want = lang === 'fr' ? /^fr/i : /^en/i;
+    const pool = voices.filter(v => want.test(v.lang));
+    const pref = lang === 'fr' ? [/fr-CA/i, /Google.*fran/i, /Microsoft.*(Antoine|Jean|Henri)/i]
+                               : [/Google UK English Male/i, /Microsoft (Ryan|Guy|Christopher|Liam)/i, /en-GB/i, /Male/i];
+    for (const re of pref) { const v = pool.find(x => re.test(x.name) || re.test(x.lang)); if (v) return v; }
+    return pool[0] || null;
+  }
+  function speak(text) {
+    say.textContent = text;
+    if (!voiceOn || !window.speechSynthesis) { setState('standby'); return; }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(); if (v) u.voice = v;
+    u.lang = v ? v.lang : (lang === 'fr' ? 'fr-CA' : 'en-GB'); u.rate = 1.0; u.pitch = 0.95;
+    u.onstart = () => setState('speaking', lang === 'fr' ? 'je parle' : 'speaking');
+    u.onend = u.onerror = () => setState('standby', lang === 'fr' ? 'en attente' : 'standby');
+    speechSynthesis.speak(u);
+  }
+
+  // ---------- asking JARVIS ----------
+  async function ask(text) {
+    text = String(text || '').trim();
+    if (!text || busy) return;
+    busy = true; heard.className = 'heard'; heard.textContent = text; say.textContent = '';
+    addMsg('You', text);
+    setState('thinking', lang === 'fr' ? 'je réfléchis' : 'thinking');
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
+    try {
+      const r = await fetch('api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ text, lang }), signal: ctl.signal });
+      if (!r.ok) throw new Error('server answered ' + r.status);
+      const d = await r.json();
+      stats.req++; stats.cost += Number(d.cost_cad) || 0; if (d.needs_approval) stats.appr++;
+      $('sReq').textContent = stats.req; $('sCost').textContent = stats.cost.toFixed(2);
+      $('sModel').textContent = d.model ? (d.answered_by + ' · ' + d.model.split('/').pop()) : '—';
+      $('sAppr').textContent = stats.appr;
+      let extra = '';
+      if (d.steps && d.steps.length) extra += '<ol>' + d.steps.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>';
+      const meta = [d.department && d.department !== 'jarvis' ? d.department : '', d.priority ? 'priority ' + d.priority : '',
+                    d.needs_approval ? 'needs approval' : ''].filter(Boolean).join(' · ');
+      if (meta) extra += '<div class="meta">' + esc(meta) + '</div>';
+      addMsg('JARVIS', d.spoken || '(no answer)', extra);
+      if (d.needs_approval) addApproval(d, text);
+      if (d.ok === false) setState('error', 'no AI available');
+      speak(d.spoken || '');
+      if (d.ok === false) setTimeout(() => setState('standby'), 4000);
+    } catch (e) {
+      const m = e.name === 'AbortError' ? 'The request took too long.' : 'I could not reach the server (' + e.message + ').';
+      addMsg('JARVIS', m); setState('error', 'connection problem'); say.textContent = m;
+      setTimeout(() => setState('standby'), 4000);
+    } finally { clearTimeout(to); busy = false; health(); }
+  }
+  function addApproval(d, text) {
+    const box = $('appr'); const e = box.querySelector('.empty'); if (e) e.remove();
+    const div = document.createElement('div'); div.className = 'appr';
+    div.innerHTML = '<div class="t">' + esc(d.summary || text) + '</div><div class="r">' + esc((d.approval_reasons || []).join('; ') || 'policy') +
+                    ' · sent to Telegram</div>';
+    box.prepend(div);
+  }
+
+  // ---------- listening ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, listening = false, finalText = '';
+  if (!SR) $('hint').textContent = 'Voice input needs Google Chrome or Microsoft Edge. You can still type below.';
+  function startListen() {
+    if (!SR || listening || busy) return;
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    rec = new SR(); rec.lang = lang === 'fr' ? 'fr-CA' : 'en-CA'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    finalText = ''; listening = true; heard.textContent = ''; say.textContent = '';
+    $('talk').classList.add('active'); setState('listening', lang === 'fr' ? "j'écoute" : 'listening');
+    rec.onresult = ev => {
+      let interim = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalText += t + ' '; else interim += t;
+      }
+      heard.className = 'heard' + (interim ? ' interim' : ''); heard.textContent = (finalText + interim).trim();
+    };
+    rec.onerror = ev => {
+      if (ev.error === 'not-allowed') { say.textContent = 'Microphone blocked: click the lock icon in the address bar and allow the microphone.'; }
+      else if (ev.error !== 'aborted' && ev.error !== 'no-speech') say.textContent = 'Voice error: ' + ev.error;
+    };
+    rec.onend = () => {
+      listening = false; $('talk').classList.remove('active');
+      const t = (finalText || heard.textContent || '').trim();
+      if (t) ask(t); else setState('standby', lang === 'fr' ? 'en attente' : 'standby');
+    };
+    try { rec.start(); } catch { listening = false; }
+  }
+  function stopListen() { if (rec && listening) { try { rec.stop(); } catch {} } }
+
+  // hold-to-talk: space bar, TALK button, or the core
+  const typing = () => document.activeElement === $('text');
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !typing() && !e.repeat) { e.preventDefault(); startListen(); }
+    if (e.key === 'Escape') { if (window.speechSynthesis) speechSynthesis.cancel(); stopListen(); setState('standby'); }
+  });
+  document.addEventListener('keyup', e => { if (e.code === 'Space' && !typing()) { e.preventDefault(); stopListen(); } });
+  for (const el of [$('talk'), core]) {
+    el.addEventListener('pointerdown', e => { e.preventDefault(); startListen(); });
+    el.addEventListener('pointerup', stopListen); el.addEventListener('pointerleave', stopListen);
+  }
+  $('text').addEventListener('keydown', e => { if (e.key === 'Enter') { const t = e.target.value; e.target.value = ''; ask(t); } });
+  $('lang').onclick = () => { lang = lang === 'en' ? 'fr' : 'en'; store.set('lang', lang); applyLang(); tick(); };
+  $('mute').onclick = () => { voiceOn = !voiceOn; store.set('voice', voiceOn ? '1' : '0'); applyVoice(); if (!voiceOn && window.speechSynthesis) speechSynthesis.cancel(); };
+  $('full').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
+  setState('standby');
+})();
+</script>
+</body>
+</html>
