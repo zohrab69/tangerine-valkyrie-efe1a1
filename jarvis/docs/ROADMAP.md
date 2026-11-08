@@ -31,7 +31,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] `llm.call` sub-workflow (router from v0, with fallback chain, persistent ledger, JSON validation)
 - [x] Telegram bot created (owner chat ID 6203634137), `JARVIS Telegram` credential saved in server n8n (2026-11-08)
 - [x] **JARVIS on Telegram live (2026-11-08):** `jarvis-telegram-v3.json` published on the server; owner message -> work order reply in Telegram, free AI, $0. Fix applied: Telegram parse mode HTML (underscores broke Markdown)
-- [~] `jarvis-telegram-v4.json`: fixed approval rule in code (AI can only make it stricter) + Telegram Approve/Decline buttons (48 h, no answer = rejected); logic tested offline
+- [x] (live 2026-11-08, Decline tested: reply showed REJECTED; v3 unpublished) `jarvis-telegram-v4.json`: fixed approval rule in code (AI can only make it stricter) + Telegram Approve/Decline buttons (48 h, no answer = rejected); logic tested offline
 - [ ] Error alerts on Telegram (Error Trigger workflow)
 - [ ] `jarvis.ceo`: dispatch to managers and a daily report
 - [ ] `ecom.manager` plus the research/finance roles as the funnel in ARCHITECTURE.md §2
