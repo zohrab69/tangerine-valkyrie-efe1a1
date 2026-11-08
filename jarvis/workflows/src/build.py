@@ -111,8 +111,9 @@ def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme,
     if tail is not None:
         n += tail[0]
         c.update(tail[1])
-        for src in ("Parse, cost & log", "All AIs unavailable: ask owner"):
-            c[src] = {"main": [[{"node": tail[2], "type": "main", "index": 0}]]}
+        sinks = tail[2] if isinstance(tail[2], tuple) else (tail[2], tail[2])
+        for src, dst in zip(("Parse, cost & log", "All AIs unavailable: ask owner"), sinks):
+            c[src] = {"main": [[{"node": dst, "type": "main", "index": 0}]]}
     wf = {"name": wf_name, "nodes": n, "connections": c,
           "settings": {"executionOrder": "v1", "saveManualExecutions": True}, "pinData": {}}
     (here.parent / file_name).write_text(json.dumps(wf, indent=2) + "\n")
@@ -159,18 +160,39 @@ tg_front = (
    "Only the owner?": {"main": [[{"node": "Owner request (Telegram)", "type": "main", "index": 0}], []]}},
   "Owner request (Telegram)")
 tg_tail = (
-  [node("t8", "Format reply", "n8n-nodes-base.code", 2, [1750, 400], {"jsCode": code("format-reply.js")}),
-   node("t9", "Reply on Telegram", "n8n-nodes-base.telegram", 1.2, [1950, 400], {
+  [node("t5", "Approval rule", "n8n-nodes-base.code", 2, [1700, 100], {"jsCode": code("approval-rule.js")}),
+   node("t6", "Needs owner approval?", "n8n-nodes-base.if", 2.2, [1900, 100], {
+        "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "strict", "version": 2},
+                       "conditions": [{"id": "na1", "leftValue": "={{ $json.needs_approval }}", "rightValue": "",
+                                       "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
+                       "combinator": "and"}, "options": {}}),
+   node("t7", "Ask owner to approve", "n8n-nodes-base.telegram", 1.2, [2150, -50], {
+        "operation": "sendAndWait",
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "message": "={{ $json.approval_text }}",
+        "responseType": "approval",
+        "approvalOptions": {"values": {"approvalType": "double", "approveLabel": "✅ Approve", "disapproveLabel": "❌ Decline"}},
+        "options": {"limitWaitTime": {"values": {"limitType": "afterTimeInterval", "resumeAmount": 48, "resumeUnit": "hours"}},
+                    "appendAttribution": False}}, webhookId="78396cf1-c6be-4926-a714-86d29a185cb6"),
+   node("t10", "Record decision", "n8n-nodes-base.code", 2, [2400, -50], {"jsCode": code("record-decision.js")}),
+   node("t8", "Format reply", "n8n-nodes-base.code", 2, [2650, 300], {"jsCode": code("format-reply.js")}),
+   node("t9", "Reply on Telegram", "n8n-nodes-base.telegram", 1.2, [2850, 300], {
         "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
         "text": "={{ $json.reply_text }}",
         "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}})],
-  {"Format reply": {"main": [[{"node": "Reply on Telegram", "type": "main", "index": 0}]]}},
-  "Format reply")
-chain_workflow("JARVIS Telegram v3", "jarvis-telegram-v3.json", "omniroute-router.js",
+  {"Approval rule": {"main": [[{"node": "Needs owner approval?", "type": "main", "index": 0}]]},
+   "Needs owner approval?": {"main": [[{"node": "Ask owner to approve", "type": "main", "index": 0}],
+                                      [{"node": "Format reply", "type": "main", "index": 0}]]},
+   "Ask owner to approve": {"main": [[{"node": "Record decision", "type": "main", "index": 0}]]},
+   "Record decision": {"main": [[{"node": "Format reply", "type": "main", "index": 0}]]},
+   "Format reply": {"main": [[{"node": "Reply on Telegram", "type": "main", "index": 0}]]}},
+  ("Approval rule", "Format reply"))
+chain_workflow("JARVIS Telegram v4 (approvals)", "jarvis-telegram-v4.json", "omniroute-router.js",
     ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
     lambda p: HEADER,
-    "## JARVIS Telegram v3 - talk to JARVIS from your phone\n"
+    "## JARVIS Telegram v4 - talk to JARVIS + approve from your phone\n"
+    "Launching, spending, ads, subscriptions, contracts, refunds, contacting new people, price or account changes: JARVIS first asks you with Approve / Decline buttons (48 h; no answer = rejected).\n"
     "Only messages from the owner's chat ID are answered; everyone else is ignored.\n"
-    "Setup: select **JARVIS Telegram** in *Telegram Trigger* and *Reply on Telegram*, and **OmniRoute** in both *Call* nodes. Save, then switch the workflow to **Active** (Publish).\n"
-    "Only one Telegram trigger per bot can be active at a time.",
+    "Setup: select **JARVIS Telegram** in *Telegram Trigger*, *Ask owner to approve* and *Reply on Telegram*, and **OmniRoute** in both *Call* nodes. Save, then switch the workflow to **Active** (Publish).\n"
+    "Only one Telegram trigger per bot can be active at a time: unpublish v3 before publishing v4.",
     front=tg_front, tail=tg_tail)

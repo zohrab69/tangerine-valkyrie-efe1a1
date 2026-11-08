@@ -15,10 +15,16 @@ if (j.message_to_owner) {
     'Summary: ' + (d.summary || ''),
     'Steps:',
     ...steps.map((s, i) => (i + 1) + '. ' + (typeof s === 'string' ? s : JSON.stringify(s))),
-    'Needs your approval: ' + (d.needs_owner_approval ? 'YES - ' + (d.approval_reason || '') : 'no'),
+    'Needs your approval: ' + (j.needs_approval ? 'YES - ' + (j.approval_reasons || []).join('; ') : 'no'),
     'Data needed: ' + (data.length ? data.join('; ') : 'none'),
     'Answered by: ' + j.answered_by + ' (' + j.model + '), cost: ' + j.cost_cad + ' CAD',
   ];
+  const STATUS = {
+    approved: 'Your decision: APPROVED. JARVIS will continue with this plan.',
+    rejected: 'Your decision: REJECTED. JARVIS will not do this.',
+    expired_rejected: 'No answer within 48 hours: treated as REJECTED.',
+  };
+  if (STATUS[j.approval_status]) lines.push(STATUS[j.approval_status]);
 }
 // Sent with parse_mode HTML: escape the three characters HTML treats specially.
 const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
