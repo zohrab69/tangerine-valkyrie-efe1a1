@@ -26,7 +26,7 @@ VOICES = {"en": "en_GB-alan-medium", "fr": "fr_FR-tom-medium"}
 MAX_CHARS = 1500
 LOCK = threading.Lock()          # one synthesis at a time: keeps memory and CPU low
 _loaded = {}
-KOKORO_VOICE = os.environ.get("JARVIS_VOICE", "bm_george")
+KOKORO_VOICE = os.environ.get("JARVIS_VOICE", "am_adam")
 SPEED = float(os.environ.get("JARVIS_SPEED", "1.05"))
 _kokoro = None
 

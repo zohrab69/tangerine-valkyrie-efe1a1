@@ -125,7 +125,7 @@ services:
     image: jarvis-tts:local
     restart: unless-stopped
     environment:
-      JARVIS_VOICE: ${JARVIS_VOICE:-bm_george}
+      JARVIS_VOICE: ${JARVIS_VOICE:-am_adam}
       JARVIS_SPEED: ${JARVIS_SPEED:-1.05}
     mem_limit: 1g
     networks: [jarvis-net]
