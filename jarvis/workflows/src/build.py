@@ -355,19 +355,27 @@ def lnk(c, a, b, out=0):
 v5_front_nodes = [
   node("t1", "Telegram Trigger", "n8n-nodes-base.telegramTrigger", 1.2, [-400, 400],
        {"updates": ["message"], "additionalFields": {}}, webhookId="1fd950cf-288c-4312-a020-1d3c27a80a42"),
-  tg_front[0][1],   # Only the owner?
-  ifnode("t4", "Reply to a product photo?", [-100, 400],
-         "={{ /CJ SKU\\s+\\S+/.test($json.message?.reply_to_message?.caption ?? '') }}"),
+  node("t2", "Only the owner?", "n8n-nodes-base.if", 2.2, [-150, 400], {
+       "conditions": {"options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose", "version": 2},
+                      "conditions": [
+                        {"id": "o1", "leftValue": "={{ String($json.message?.chat?.id ?? '') }}", "rightValue": OWNER_CHAT_ID,
+                         "operator": {"type": "string", "operation": "equals"}},
+                        {"id": "o2", "leftValue": "={{ ($json.message?.text ?? '') + ($json.message?.caption ?? '') }}", "rightValue": "",
+                         "operator": {"type": "string", "operation": "notEmpty", "singleValue": True}}],
+                      "combinator": "and"}, "options": {}}),
+  ifnode("t4", "Sample request?", [100, 620],
+         "={{ /CJ SKU\\s+\\S+/.test(($json.message?.reply_to_message?.caption ?? '') + ' ' + ($json.message?.caption ?? '')) || /^\\s*(sample|échantillon|echantillon)\\b/i.test($json.message?.text ?? '') }}"),
   tg_front[0][2],   # Owner request (Telegram)
 ]
 v5_front_conns = {}
 lnk(v5_front_conns, "Telegram Trigger", "Only the owner?")
-lnk(v5_front_conns, "Only the owner?", "Reply to a product photo?")
-lnk(v5_front_conns, "Reply to a product photo?", "Read the reply", 0)
-lnk(v5_front_conns, "Reply to a product photo?", "Owner request (Telegram)", 1)
+lnk(v5_front_conns, "Only the owner?", "Sample request?")
+lnk(v5_front_conns, "Sample request?", "Read the reply", 0)
+lnk(v5_front_conns, "Sample request?", "Owner request (Telegram)", 1)
 Y = 1500
 sn = [
   node("s1", "Read the reply", "n8n-nodes-base.code", 2, [100, Y], {"jsCode": scode("1-read-reply.js")}),
+  ifnode("s1b", "Know the product?", [210, Y + 160], "={{ !$json.problem }}"),
   ifnode("s2", "Need a CJ token?", [320, Y], "={{ $json.need_token === true }}"),
   node("s3", "CJ get token", "n8n-nodes-base.httpRequest", 4.2, [540, Y - 120], {
        "method": "POST", "url": CJ + "/authentication/getAccessToken",
@@ -407,7 +415,8 @@ sn = [
        "Credentials: **CJ API key** in *CJ get token*; **JARVIS Telegram** in *Ask owner: approve sample?* and *Reply: sample*."}),
 ]
 sc = {}
-lnk(sc, "Read the reply", "Need a CJ token?")
+lnk(sc, "Read the reply", "Know the product?")
+lnk(sc, "Know the product?", "Need a CJ token?", 0); lnk(sc, "Know the product?", "Sample result", 1)
 lnk(sc, "Need a CJ token?", "CJ get token", 0); lnk(sc, "Need a CJ token?", "With token", 1)
 lnk(sc, "CJ get token", "Save token"); lnk(sc, "Save token", "With token")
 lnk(sc, "With token", "CJ product details"); lnk(sc, "CJ product details", "Pick variant")

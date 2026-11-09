@@ -14,3 +14,11 @@ for (const ans of [{ data: { approved: true } }, { data: { approved: false } }, 
 N['Pick variant'] = run('3-pick.js', [{ json: { result: false, code: 1600100, message: 'Product not found' } }], N, sd);
 N['Sample plan'] = run('4-plan.js', [{ json: {} }], N, sd);
 console.log('--- problem:\n' + run('5-after.js', [{ json: {} }], N, sd)[0].json.reply_text);
+
+// forwarded photo (caption on the message itself) and plain "sample" without a photo
+const fwd = run('1-read-reply.js', [{ json: { message: { caption, chat: { id: 1 } } } }], {}, {})[0].json;
+console.log('forwarded -> sku', fwd.sku, 'problem', fwd.problem);
+const plain = run('1-read-reply.js', [{ json: { message: { text: 'sample', chat: { id: 1 } } } }], {}, {})[0].json;
+const N2 = { 'Read the reply': [{ json: plain }] };
+const out = new Function('$input', '$', fs.readFileSync('5-after.js', 'utf8'))({ first: () => ({ json: {} }) }, n => { if (!N2[n]) throw new Error('no ' + n); return { first: () => N2[n][0] }; });
+console.log('plain sample ->', out[0].json.reply_text);

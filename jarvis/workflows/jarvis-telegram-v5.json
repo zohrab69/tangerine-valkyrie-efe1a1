@@ -24,7 +24,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        0,
+        -150,
         400
       ],
       "parameters": {
@@ -47,7 +47,7 @@
             },
             {
               "id": "o2",
-              "leftValue": "={{ $json.message?.text ?? '' }}",
+              "leftValue": "={{ ($json.message?.text ?? '') + ($json.message?.caption ?? '') }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -63,12 +63,12 @@
     },
     {
       "id": "t4",
-      "name": "Reply to a product photo?",
+      "name": "Sample request?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -100,
-        400
+        100,
+        620
       ],
       "parameters": {
         "conditions": {
@@ -81,7 +81,7 @@
           "conditions": [
             {
               "id": "t4c",
-              "leftValue": "={{ /CJ SKU\\s+\\S+/.test($json.message?.reply_to_message?.caption ?? '') }}",
+              "leftValue": "={{ /CJ SKU\\s+\\S+/.test(($json.message?.reply_to_message?.caption ?? '') + ' ' + ($json.message?.caption ?? '')) || /^\\s*(sample|\u00e9chantillon|echantillon)\\b/i.test($json.message?.text ?? '') }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -467,7 +467,41 @@
         1500
       ],
       "parameters": {
-        "jsCode": "// The owner replied to a product photo from the research report (e.g. \"sample\", \"order 2\", \"\u00e9chantillon\").\n// Everything we need is in the photo caption: name and CJ SKU. Quantity: a number 1-3 in the reply, default 1.\nconst msg = $input.first().json.message || {};\nconst cap = (msg.reply_to_message && (msg.reply_to_message.caption || msg.reply_to_message.text)) || '';\nconst sku = (cap.match(/CJ SKU\\s+([A-Za-z0-9_-]+)/) || [])[1] || null;\nconst name = (cap.split('\\n')[0] || '').replace(/^\\d+\\.\\s*/, '').trim().slice(0, 120);\nconst qtyMatch = (msg.text || '').match(/\\b([1-3])\\b/);\nconst store = $getWorkflowStaticData('global');\nconst t = store.cjToken;\nconst tokenOk = t && t.value && t.expires && new Date(t.expires).getTime() - Date.now() > 24 * 3600 * 1000;\nreturn [{ json: {\n  sku, name, qty: qtyMatch ? Number(qtyMatch[1]) : 1, owner_text: (msg.text || '').slice(0, 200),\n  chat_id: msg.chat ? msg.chat.id : null, need_token: !tokenOk, token: tokenOk ? t.value : null,\n} }];\n"
+        "jsCode": "// Sample request. Accepted forms:\n//  - a REPLY to a research product photo (\"sample\", \"sample 2\", \"\u00e9chantillon\")\n//  - the product photo FORWARDED back to JARVIS (its caption is included)\n//  - just \"sample\" with no photo -> JARVIS explains how to ask\n// Everything we need is in the photo caption: name and CJ SKU. Quantity: a number 1-3 in the text, default 1.\nconst msg = $input.first().json.message || {};\nconst cap = (msg.reply_to_message && (msg.reply_to_message.caption || msg.reply_to_message.text)) || msg.caption || '';\nconst sku = (cap.match(/CJ SKU\\s+([A-Za-z0-9_-]+)/) || [])[1] || null;\nconst name = (cap.split('\\n')[0] || '').replace(/^\\d+\\.\\s*/, '').trim().slice(0, 120);\nconst qtyMatch = (msg.text || '').match(/\\b([1-3])\\b/);\nconst store = $getWorkflowStaticData('global');\nconst t = store.cjToken;\nconst tokenOk = t && t.value && t.expires && new Date(t.expires).getTime() - Date.now() > 24 * 3600 * 1000;\nreturn [{ json: {\n  problem: sku ? null : 'I need to know which product. In Telegram, swipe left on the product photo (or long-press it and tap Reply) and type \"sample\". You can also forward the photo to me',\n  sku, name, qty: qtyMatch ? Number(qtyMatch[1]) : 1, owner_text: (msg.text || '').slice(0, 200),\n  chat_id: msg.chat ? msg.chat.id : null, need_token: !tokenOk, token: tokenOk ? t.value : null,\n} }];\n"
+      }
+    },
+    {
+      "id": "s1b",
+      "name": "Know the product?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        210,
+        1660
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "s1bc",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       }
     },
     {
@@ -757,7 +791,7 @@
         1500
       ],
       "parameters": {
-        "jsCode": "// Final message (HTML). Approved -> exact steps to place the order at CJ. Declined/expired -> nothing done.\nlet q;\ntry { q = $('Sample plan').first().json; } catch (e) { q = $('Pick variant').first().json; }\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet text;\nif (q.problem) {\n  text = 'JARVIS could not prepare the sample order for <b>' + esc(q.name || q.sku || 'this product') + '</b>: ' + esc(q.problem) +\n         '.\\nNothing was ordered. Reply \"sample\" to a product photo from the research report to try again.';\n} else {\n  const r = ($input.first().json || {}).data || {};\n  if (r.approved === true) {\n    text = [\n      '\u2705 <b>Sample approved</b>: ' + esc(q.cj_name),\n      'Order it at CJ (about 2 minutes):',\n      '1. cjdropshipping.com, search <code>' + esc(q.sku) + '</code>',\n      '2. Choose variant: ' + esc(q.variant || 'default') + ', quantity ' + q.qty,\n      '3. Shipping method: ' + esc(q.ship.name) + ' (' + esc(q.ship.days) + ' days), to your Canadian address',\n      '4. Pay at checkout. Expected total about ' + q.total_usd + ' USD (~' + q.total_cad + ' CAD) before tax and duties.',\n      'When it arrives, tell JARVIS the real delivery days and quality.',\n      '(JARVIS will place orders by itself only after CJ ordering is connected and tested.)',\n    ].join('\\n');\n  } else if (r.approved === false) {\n    text = '\u274c Sample declined: ' + esc(q.cj_name) + '. Nothing was ordered.';\n  } else {\n    text = 'No answer within 48 hours: the sample for ' + esc(q.cj_name) + ' was treated as declined. Nothing was ordered.';\n  }\n}\nreturn [{ json: { reply_text: text.slice(0, 4000) } }];\n"
+        "jsCode": "// Final message (HTML). Approved -> exact steps to place the order at CJ. Declined/expired -> nothing done.\nlet q;\ntry { q = $('Sample plan').first().json; } catch (e) {\n  try { q = $('Pick variant').first().json; } catch (e2) { q = $('Read the reply').first().json; }\n}\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet text;\nif (q.problem) {\n  text = q.sku\n    ? 'JARVIS could not prepare the sample order for <b>' + esc(q.name || q.sku) + '</b>: ' + esc(q.problem) +\n      '.\\nNothing was ordered. Reply \"sample\" to a product photo from the research report to try again.'\n    : 'JARVIS: ' + esc(q.problem) + '.';\n} else {\n  const r = ($input.first().json || {}).data || {};\n  if (r.approved === true) {\n    text = [\n      '\u2705 <b>Sample approved</b>: ' + esc(q.cj_name),\n      'Order it at CJ (about 2 minutes):',\n      '1. cjdropshipping.com, search <code>' + esc(q.sku) + '</code>',\n      '2. Choose variant: ' + esc(q.variant || 'default') + ', quantity ' + q.qty,\n      '3. Shipping method: ' + esc(q.ship.name) + ' (' + esc(q.ship.days) + ' days), to your Canadian address',\n      '4. Pay at checkout. Expected total about ' + q.total_usd + ' USD (~' + q.total_cad + ' CAD) before tax and duties.',\n      'When it arrives, tell JARVIS the real delivery days and quality.',\n      '(JARVIS will place orders by itself only after CJ ordering is connected and tested.)',\n    ].join('\\n');\n  } else if (r.approved === false) {\n    text = '\u274c Sample declined: ' + esc(q.cj_name) + '. Nothing was ordered.';\n  } else {\n    text = 'No answer within 48 hours: the sample for ' + esc(q.cj_name) + ' was treated as declined. Nothing was ordered.';\n  }\n}\nreturn [{ json: { reply_text: text.slice(0, 4000) } }];\n"
       }
     },
     {
@@ -810,14 +844,14 @@
       "main": [
         [
           {
-            "node": "Reply to a product photo?",
+            "node": "Sample request?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Reply to a product photo?": {
+    "Sample request?": {
       "main": [
         [
           {
@@ -1039,7 +1073,25 @@
       "main": [
         [
           {
+            "node": "Know the product?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Know the product?": {
+      "main": [
+        [
+          {
             "node": "Need a CJ token?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sample result",
             "type": "main",
             "index": 0
           }

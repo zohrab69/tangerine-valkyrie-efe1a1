@@ -1,11 +1,15 @@
 // Final message (HTML). Approved -> exact steps to place the order at CJ. Declined/expired -> nothing done.
 let q;
-try { q = $('Sample plan').first().json; } catch (e) { q = $('Pick variant').first().json; }
+try { q = $('Sample plan').first().json; } catch (e) {
+  try { q = $('Pick variant').first().json; } catch (e2) { q = $('Read the reply').first().json; }
+}
 const esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 let text;
 if (q.problem) {
-  text = 'JARVIS could not prepare the sample order for <b>' + esc(q.name || q.sku || 'this product') + '</b>: ' + esc(q.problem) +
-         '.\nNothing was ordered. Reply "sample" to a product photo from the research report to try again.';
+  text = q.sku
+    ? 'JARVIS could not prepare the sample order for <b>' + esc(q.name || q.sku) + '</b>: ' + esc(q.problem) +
+      '.\nNothing was ordered. Reply "sample" to a product photo from the research report to try again.'
+    : 'JARVIS: ' + esc(q.problem) + '.';
 } else {
   const r = ($input.first().json || {}).data || {};
   if (r.approved === true) {
