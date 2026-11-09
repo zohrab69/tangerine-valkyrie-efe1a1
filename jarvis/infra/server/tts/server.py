@@ -31,7 +31,7 @@ def synth_wav(text, lang):
     with LOCK:
         v = voice(lang)
         with wave.open(buf, "wb") as wav:
-            v.synthesize_wav(text, wav, syn_config=SynthesisConfig(length_scale=1.05))
+            v.synthesize_wav(text, wav, syn_config=SynthesisConfig(length_scale=0.88))
     return buf.getvalue()
 
 
