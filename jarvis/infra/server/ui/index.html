@@ -10,9 +10,16 @@
     --ink:#d8ecf7; --muted:#7f9bb0; --core:#3fd3ff; --core2:#1b8fd1; --warn:#ffb547; --bad:#ff5d6c; --ok:#4be3a2;
     --glow:0 0 24px rgba(63,211,255,.45);
   }
+  /* Colour themes (button "Theme"). Your own picture (button "Picture") goes behind any theme. */
+  body[data-theme="stark"]{--core:#ff5a3c;--core2:#b8321e;--line:rgba(255,180,90,.22);--panel:rgba(40,12,8,.62);--glow:0 0 24px rgba(255,120,60,.5);--bgc1:#2a0c06;--bgc2:#080302}
+  body[data-theme="night"]{--core:#9fe8ff;--core2:#4aa3c4;--line:rgba(160,230,255,.14);--panel:rgba(8,10,14,.7);--glow:0 0 20px rgba(160,230,255,.35);--bgc1:#0b0d12;--bgc2:#000}
+  body[data-theme="emerald"]{--core:#3dffa8;--core2:#16a06a;--line:rgba(80,255,170,.18);--panel:rgba(6,30,22,.62);--glow:0 0 24px rgba(61,255,168,.4);--bgc1:#06281c;--bgc2:#020a07}
+  body[data-theme="violet"]{--core:#c08bff;--core2:#7a3fd6;--line:rgba(200,150,255,.2);--panel:rgba(26,12,44,.62);--glow:0 0 24px rgba(192,139,255,.45);--bgc1:#1f0c38;--bgc2:#07020d}
+  body{--bgc1:#0b1a2c;--bgc2:var(--bg)}
+  body.has-img{background:linear-gradient(rgba(3,6,12,.55),rgba(3,6,12,.75)),var(--bgimg) center/cover no-repeat fixed !important}
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:radial-gradient(1200px 800px at 50% 42%,#0b1a2c 0%,var(--bg) 62%);color:var(--ink);
+  body{margin:0;background:radial-gradient(1200px 800px at 50% 42%,var(--bgc1) 0%,var(--bgc2) 62%);color:var(--ink);
        font:15px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif;overflow:hidden}
   body::before{content:"";position:fixed;inset:0;pointer-events:none;
        background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px)}
@@ -151,6 +158,9 @@
     <button id="lang" type="button" title="Language">EN</button>
     <button id="hands" type="button" title="Hands-free: say “JARVIS …”">Hands-free off</button>
     <button id="mute" type="button" class="on" title="Voice replies">Voice on</button>
+    <button id="theme" type="button" title="Change colours">Theme</button>
+    <button id="pic" type="button" title="Use your own background picture">Picture</button>
+    <input id="picfile" type="file" accept="image/*" hidden>
     <button id="full" type="button" title="Full screen">⛶</button>
     <div id="hint" class="hint">Space = hold to talk · Hands-free: just say “JARVIS, …” · Enter = send typed text · Esc = stop speaking</div>
   </footer>
@@ -394,6 +404,30 @@
   $('lang').onclick = () => { lang = lang === 'en' ? 'fr' : 'en'; store.set('lang', lang); applyLang(); tick();
     if (handsFree) { pauseMic(); if (!speaking) startHandsFree(); idleState(); } };
   $('mute').onclick = () => { voiceOn = !voiceOn; store.set('voice', voiceOn ? '1' : '0'); applyVoice(); if (!voiceOn) { stopSpeaking(); idleState(); } };
+  // ---------- background: colour themes + your own picture (saved in this browser only) ----------
+  const THEMES = [['arc', 'Arc blue'], ['stark', 'Stark red'], ['night', 'Night'], ['emerald', 'Emerald'], ['violet', 'Violet']];
+  function applyTheme(t) { document.body.dataset.theme = t; const n = THEMES.find(x => x[0] === t); $('theme').textContent = 'Theme: ' + (n ? n[1] : 'Arc blue'); }
+  function applyPic(url) {
+    if (url) { document.body.style.setProperty('--bgimg', 'url("' + url + '")'); document.body.classList.add('has-img'); $('pic').textContent = 'Remove picture'; }
+    else { document.body.style.removeProperty('--bgimg'); document.body.classList.remove('has-img'); $('pic').textContent = 'Picture'; }
+  }
+  applyTheme(store.get('theme', 'arc')); applyPic(store.get('bgpic', ''));
+  $('theme').onclick = () => { const i = THEMES.findIndex(x => x[0] === (document.body.dataset.theme || 'arc')); const t = THEMES[(i + 1) % THEMES.length][0]; store.set('theme', t); applyTheme(t); };
+  $('pic').onclick = () => { if (document.body.classList.contains('has-img')) { store.set('bgpic', ''); applyPic(''); } else $('picfile').click(); };
+  $('picfile').onchange = e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    const img = new Image(), src = URL.createObjectURL(f);
+    img.onload = () => {   // shrink to max 1920 px wide so it can be remembered by the browser
+      const k = Math.min(1, 1920 / img.width), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(src);
+      const data = c.toDataURL('image/jpeg', 0.82);
+      applyPic(data);
+      try { localStorage.setItem('jarvis.bgpic', data); } catch { say.textContent = 'Picture shown, but too large to remember after a refresh.'; }
+    };
+    img.onerror = () => { URL.revokeObjectURL(src); say.textContent = 'That file is not a picture I can use.'; };
+    img.src = src;
+  };
   $('full').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
   setState('standby');
 })();
