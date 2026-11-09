@@ -59,6 +59,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [~] Screen conversation 2026-11-09 (owner: mishearing, 6 s too short): reply window 15 s with a 'listening for your reply…' state; the screen sends the last 4 exchanges so JARVIS understands follow-ups and corrects misheard words; recognition en-US with 3 alternatives (prefers the one containing "JARVIS")
 
+- [ ] Rename the assistant later (owner, 2026-11-09): screen title, wake word (2-3 distinctive syllables; keep "JARVIS" as a second wake word during the switch), self-introduction in prompts and voice text, and the Telegram bot name via BotFather /setname
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
