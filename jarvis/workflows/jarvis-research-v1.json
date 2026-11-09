@@ -13,7 +13,7 @@
       "parameters": {
         "width": 1500,
         "height": 230,
-        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo* and *Send report*. Check each one after import: n8n may auto-pick the wrong credential.\nAll money figures are estimates. Nothing is ordered or published."
+        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*; **OpenAI** in *JARVIS voice (OpenAI)* (a few seconds of speech, well under 1 cent). Check each one after import: n8n may auto-pick the wrong credential.\nAll money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message)."
       }
     },
     {
@@ -448,6 +448,70 @@
       }
     },
     {
+      "id": "r23",
+      "name": "What JARVIS says",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// What JARVIS says out loud after the report. Short, factual, and only about what really happened.\nlet top = [];\ntry { top = $('Shortlist').first().json.top || []; } catch (e) { top = []; }\nconst hNum = Number(new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })) % 24;\nconst hour = ((hNum % 12) || 12) + (hNum < 12 ? ' AM' : ' PM');\nconst NAME = 'Zohrab';\nconst greet = hNum < 12 ? 'Good morning' : hNum < 18 ? 'Good afternoon' : 'Good evening';\nlet text;\nif (top.length) {\n  const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];\n  const shortName = best.name.split(/[-,|]/)[0].trim().split(/\\s+/).slice(0, 6).join(' ');\n  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} products, with photos, shipping times to Canada and profit estimates. ` +\n         `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +\n         `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;\n} else {\n  text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;\n}\nreturn [{ json: { tts_body: { model: 'gpt-4o-mini-tts', voice: 'onyx', response_format: 'mp3', input: text.slice(0, 1000),\n  instructions: 'Calm, polite, confident British AI assistant. Clear and slightly formal. Moderate pace.' }, spoken_text: text } }];\n"
+      }
+    },
+    {
+      "id": "r24",
+      "name": "JARVIS voice (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/speech",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.tts_body) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "r25",
+      "name": "Send voice message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4840,
+        0
+      ],
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "6203634137",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "fileName": "JARVIS.mp3",
+          "title": "JARVIS",
+          "performer": "JARVIS"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
       "id": "r19",
       "name": "Send report",
       "type": "n8n-nodes-base.telegram",
@@ -695,6 +759,39 @@
         [
           {
             "node": "Send report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send report": {
+      "main": [
+        [
+          {
+            "node": "What JARVIS says",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What JARVIS says": {
+      "main": [
+        [
+          {
+            "node": "JARVIS voice (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JARVIS voice (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Send voice message",
             "type": "main",
             "index": 0
           }

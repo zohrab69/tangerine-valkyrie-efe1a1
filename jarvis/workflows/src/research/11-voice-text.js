@@ -1,0 +1,19 @@
+// What JARVIS says out loud after the report. Short, factual, and only about what really happened.
+let top = [];
+try { top = $('Shortlist').first().json.top || []; } catch (e) { top = []; }
+const hNum = Number(new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })) % 24;
+const hour = ((hNum % 12) || 12) + (hNum < 12 ? ' AM' : ' PM');
+const NAME = 'Zohrab';
+const greet = hNum < 12 ? 'Good morning' : hNum < 18 ? 'Good afternoon' : 'Good evening';
+let text;
+if (top.length) {
+  const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];
+  const shortName = best.name.split(/[-,|]/)[0].trim().split(/\s+/).slice(0, 6).join(' ');
+  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} products, with photos, shipping times to Canada and profit estimates. ` +
+         `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +
+         `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;
+} else {
+  text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;
+}
+return [{ json: { tts_body: { model: 'gpt-4o-mini-tts', voice: 'onyx', response_format: 'mp3', input: text.slice(0, 1000),
+  instructions: 'Calm, polite, confident British AI assistant. Clear and slightly formal. Moderate pace.' }, spoken_text: text } }];

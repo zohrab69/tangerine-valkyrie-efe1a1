@@ -262,8 +262,8 @@ rn = [
       "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\n"
       "Runs every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
       "gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\n"
-      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo* and *Send report*. Check each one after import: n8n may auto-pick the wrong credential.\n"
-      "All money figures are estimates. Nothing is ordered or published."}),
+      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*; **OpenAI** in *JARVIS voice (OpenAI)* (a few seconds of speech, well under 1 cent). Check each one after import: n8n may auto-pick the wrong credential.\n"
+      "All money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message)."}),
   node("r1", "Every Monday 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
        {"rule": {"interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 10}]}}),
   node("r2", "Run now (manual)", "n8n-nodes-base.manualTrigger", 1, [0, 200], {}),
@@ -309,6 +309,16 @@ rn = [
        "additionalFields": {"caption": "={{ $json.caption }}", "parse_mode": "HTML"}},
        onError="continueRegularOutput"),
   node("r22", "Summary", "n8n-nodes-base.code", 2, [3960, 300], {"jsCode": rcode("10-summary.js")}),
+  node("r23", "What JARVIS says", "n8n-nodes-base.code", 2, [4400, 100], {"jsCode": rcode("11-voice-text.js")}),
+  node("r24", "JARVIS voice (OpenAI)", "n8n-nodes-base.httpRequest", 4.2, [4620, 100], {
+       "method": "POST", "url": "https://api.openai.com/v1/audio/speech",
+       "authentication": "predefinedCredentialType", "nodeCredentialType": "openAiApi",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.tts_body) }}",
+       "options": {"timeout": 60000, "response": {"response": {"responseFormat": "file", "outputPropertyName": "data"}}}},
+       onError="continueErrorOutput"),
+  node("r25", "Send voice message", "n8n-nodes-base.telegram", 1.2, [4840, 0], {
+       "operation": "sendAudio", "chatId": OWNER_CHAT_ID, "binaryData": True, "binaryPropertyName": "data",
+       "additionalFields": {"fileName": "JARVIS.mp3", "title": "JARVIS", "performer": "JARVIS"}}, onError="continueRegularOutput"),
   node("r19", "Send report", "n8n-nodes-base.telegram", 1.2, [4180, 100], {
        "chatId": OWNER_CHAT_ID, "text": "={{ $json.report }}",
        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
@@ -321,7 +331,8 @@ links = [L("Every Monday 10:00", "Research plan"), L("Run now (manual)", "Resear
          L("Nothing found?", "Nothing-found report", 0), L("Nothing found?", "CJ variants", 1),
          L("CJ variants", "Pick variant"), L("Pick variant", "CJ shipping to Canada"), L("CJ shipping to Canada", "Finance (no AI)"),
          L("Finance (no AI)", "Shortlist"), L("Shortlist", "AI notes (free)"), L("AI notes (free)", "Report"),
-         L("Report", "Send product photo"), L("Send product photo", "Summary"), L("Summary", "Send report"), L("Nothing-found report", "Send report")]
+         L("Report", "Send product photo"), L("Send product photo", "Summary"), L("Summary", "Send report"), L("Nothing-found report", "Send report"),
+         L("Send report", "What JARVIS says"), L("What JARVIS says", "JARVIS voice (OpenAI)"), L("JARVIS voice (OpenAI)", "Send voice message", 0)]
 rc = {}
 for a, out, b in links:
     outs = rc.setdefault(a, {"main": []})["main"]
