@@ -3,6 +3,9 @@
 const body = $input.first().json.body || {};
 const owner_message = String(body.text || '').trim().slice(0, 2000);
 const lang = body.lang === 'fr' ? 'fr' : 'en';
+// Recent conversation from the screen (max 4 exchanges), so follow-up questions make sense.
+const hist = (Array.isArray(body.history) ? body.history : []).slice(-4)
+  .map(h => `Owner: ${String(h && h.you || '').slice(0, 300)} | JARVIS: ${String(h && h.jarvis || '').slice(0, 300)}`).join('\n');
 return [{
   json: {
     task_id: 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
@@ -31,7 +34,9 @@ return [{
       'steps (array of max 5 short strings, each naming the agent role that does it),',
       'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',
       'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).',
-      'If the message is small talk or a simple question, still answer in spoken_reply and use department "jarvis" with an empty steps array.'
+      'If the message is small talk or a simple question, still answer in spoken_reply and use department "jarvis" with an empty steps array.',
+      'The owner speaks by voice and speech recognition sometimes mishears words (for example "except" for "accept", "sample" for "simple"): use the conversation so far to understand what was meant, and only ask to repeat if it is really unclear.',
+      hist ? 'CONVERSATION SO FAR (oldest first):\n' + hist : ''
     ].join(' ')
   }
 }];

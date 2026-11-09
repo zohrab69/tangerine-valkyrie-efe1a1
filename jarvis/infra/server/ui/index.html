@@ -174,8 +174,12 @@
   const core = $('core'), state = $('state'), heard = $('heard'), say = $('say'), log = $('log');
   let lang = store.get('lang', 'en'), voiceOn = store.get('voice', '1') === '1', busy = false;
   let handsFree = false, speaking = false, followUntil = 0, lastSpoken = '';
+  const FOLLOW_MS = 15000;   // after JARVIS answers, you have 15 s to reply without saying "JARVIS"
+  const history = [];        // last few exchanges, sent with each request so JARVIS understands follow-ups
   const idleState = () => setState(handsFree ? 'listening' : 'standby',
+    handsFree && Date.now() < followUntil ? (lang === 'fr' ? 'je vous écoute…' : 'listening for your reply…') :
     handsFree ? (lang === 'fr' ? 'dites « JARVIS »' : 'say “JARVIS”') : (lang === 'fr' ? 'en attente' : 'standby'));
+  setInterval(() => { if (handsFree && !speaking && !busy && !listening) idleState(); }, 1000);
   let stats = { req: 0, cost: 0, appr: 0 };
 
   // ---------- UI helpers ----------
@@ -224,7 +228,7 @@
   // then switched back on shortly after it finishes.
   function pauseMic() { if (hf) { hf.onend = null; try { hf.abort(); } catch {} hf = null; } }
   function resumeMic() { if (handsFree && !hf && !speaking) setTimeout(() => { if (handsFree && !hf && !speaking) startHandsFree(); }, 700); }
-  function doneSpeaking() { speaking = false; followUntil = Date.now() + 6000; idleState(); resumeMic(); }
+  function doneSpeaking() { speaking = false; followUntil = Date.now() + FOLLOW_MS; idleState(); resumeMic(); }
   function stopSpeaking() {
     speakId++;
     if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
@@ -266,7 +270,7 @@
   }
   async function speak(text) {
     say.textContent = text;
-    if (!voiceOn || !text) { followUntil = Date.now() + 6000; idleState(); return; }
+    if (!voiceOn || !text) { followUntil = Date.now() + FOLLOW_MS; idleState(); return; }
     stopSpeaking();
     pauseMic(); lastSpoken = text;
     const id = ++speakId;
@@ -299,7 +303,7 @@
     const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
     try {
       const r = await fetch('api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ text, lang }), signal: ctl.signal });
+                                        body: JSON.stringify({ text, lang, history: history.slice(-4) }), signal: ctl.signal });
       if (!r.ok) throw new Error('server answered ' + r.status);
       const d = await r.json();
       stats.req++; stats.cost += Number(d.cost_cad) || 0; if (d.needs_approval) stats.appr++;
@@ -312,6 +316,7 @@
                     d.needs_approval ? 'needs approval' : ''].filter(Boolean).join(' · ');
       if (meta) extra += '<div class="meta">' + esc(meta) + '</div>';
       addMsg('JARVIS', d.spoken || '(no answer)', extra);
+      history.push({ you: text.slice(0, 300), jarvis: String(d.spoken || '').slice(0, 300) }); if (history.length > 6) history.shift();
       if (d.needs_approval) addApproval(d, text);
       if (d.ok === false) setState('error', 'no AI available');
       speak(d.spoken || '');
@@ -337,7 +342,7 @@
   function startListen() {
     if (!SR || listening || busy || handsFree) return;
     stopSpeaking();
-    rec = new SR(); rec.lang = lang === 'fr' ? 'fr-CA' : 'en-CA'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+    rec = new SR(); rec.lang = lang === 'fr' ? 'fr-CA' : 'en-US'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
     finalText = ''; listening = true; heard.textContent = ''; say.textContent = '';
     $('talk').classList.add('active'); setState('listening', lang === 'fr' ? "j'écoute" : 'listening');
     rec.onresult = ev => {
@@ -364,7 +369,7 @@
   // ---------- hands-free: always listening for "JARVIS ..." ----------
   // Chrome sends the audio to Google for recognition while this is on. Ignores what is heard while
   // JARVIS is thinking or speaking (so it does not answer itself). After JARVIS speaks, you have
-  // 6 seconds to reply without saying "JARVIS" again.
+  // 15 seconds to reply without saying "JARVIS" again.
   const WAKE = /\b(jarvis|jarvi|jarviz|jervis|travis|jarvus|harvis)\b[\s,.:!?-]*/i;
   let hf = null;
   // True when what the microphone heard is mostly JARVIS's own last sentence (speaker echo).
@@ -380,7 +385,7 @@
     if (m) {
       const cmd = text.slice(m.index + m[0].length).trim();
       if (cmd.length > 1) { ask(cmd); }
-      else { followUntil = Date.now() + 6000; speak(lang === 'fr' ? 'Oui ?' : 'Yes?'); }
+      else { followUntil = Date.now() + FOLLOW_MS; speak(lang === 'fr' ? 'Oui ?' : 'Yes?'); }
     } else if (Date.now() < followUntil) {
       ask(text);
     }
@@ -388,10 +393,11 @@
   window.__jarvisHeard = heardHandsFree;   // used by automated tests only
   function startHandsFree() {
     if (!SR) { say.textContent = 'Hands-free needs Google Chrome or Microsoft Edge.'; return false; }
-    hf = new SR(); hf.lang = lang === 'fr' ? 'fr-CA' : 'en-CA'; hf.continuous = true; hf.interimResults = true;
+    hf = new SR(); hf.lang = lang === 'fr' ? 'fr-CA' : 'en-US'; hf.continuous = true; hf.interimResults = true; hf.maxAlternatives = 3;
     hf.onresult = ev => {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const t = ev.results[i][0].transcript;
+        const alts = Array.from(ev.results[i]).map(a => a.transcript);
+        const t = (Date.now() >= followUntil && alts.find(x => WAKE.test(x))) || alts[0];
         if (!busy && !speaking) { heard.className = 'heard' + (ev.results[i].isFinal ? '' : ' interim'); heard.textContent = t; }
         if (ev.results[i].isFinal) heardHandsFree(t);
       }

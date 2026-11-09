@@ -57,6 +57,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] Scheduled Monday 10:00 research + voice message ran on its own 2026-11-09
 - [x] **Shared memory works (owner test 2026-11-09: screen listed the products sent on Telegram).** Then added: sample and approval decisions are also written to memory; research excludes lights/spotlights/rechargeable/solar items (a leash with a spotlight got through the electronics filter). Original note: the screen claimed it was not connected to Telegram. Now every request includes true FACTS about JARVIS, and screen/Telegram read the n8n data table `jarvis_memory` (kind, summary; owner creates it) where research writes a summary after each report
 
+- [~] Screen conversation 2026-11-09 (owner: mishearing, 6 s too short): reply window 15 s with a 'listening for your reply…' state; the screen sends the last 4 exchanges so JARVIS understands follow-ups and corrects misheard words; recognition en-US with 3 alternatives (prefers the one containing "JARVIS")
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
