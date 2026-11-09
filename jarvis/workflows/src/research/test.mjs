@@ -9,10 +9,10 @@ console.log('token cached', sd.cjToken.value, 'replan need_token', run('1-plan.j
 N['Searches'] = run('3-searches.js', N['Save token'], N, sd);
 const lists = [
   { result: true, code: 200, data: { list: [
-    { pid: 'P1', productNameEn: 'Silicone Garlic Press Peeler', categoryName: 'Kitchen Tools', productSku: 'CJ001', sellPrice: '3.10', listedNum: 820 },
+    { pid: 'P1', productNameEn: 'Silicone Garlic Press Peeler', categoryName: 'Kitchen Tools', productSku: 'CJ001', sellPrice: '3.10', listedNum: 820, productImage: 'http://cbu01.cj.com/a.jpg' },
     { pid: 'P2', productNameEn: 'USB Rechargeable Milk Frother', categoryName: 'Kitchen', sellPrice: '6.5', listedNum: 2000 },
     { pid: 'P3', productNameEn: 'Baby Food Maker', categoryName: 'Kitchen', sellPrice: '9', listedNum: 500 },
-    { pid: 'P4', productNameEn: 'Stainless Herb Scissors', categoryName: 'Kitchen Tools', productSku: 'CJ004', sellPrice: '2.40-3.10', listedNum: 300 } ] } },
+    { pid: 'P4', productNameEn: 'Stainless Herb Scissors', categoryName: 'Kitchen Tools', productSku: 'CJ004', sellPrice: '2.40-3.10', listedNum: 3, productImage: '["https://x/b.jpg","https://x/c.jpg"]' } ] } },
   { result: true, code: 200, data: { content: [ { productList: [ { id: 'P5', nameEn: 'Pet Grooming Glove', sku: 'CJ005', sellPrice: '1.90', listedNum: 1500 }, { id: 'P1', nameEn: 'dup', sellPrice: '3' } ] } ] } },
   { result: false, code: 1600200, message: 'Too many requests' } ];
 N['Screen products'] = run('4-screen.js', lists.map(json => ({ json })), N, sd);
@@ -24,7 +24,11 @@ N['Finance'] = run('6-finance.js', N['Pick variant'].map(p => ({ json: { result:
 N['Finance'].forEach(x => console.log(x.json.pid, x.json.shipping && x.json.shipping.name, 'landed', x.json.landed_cad, 'price', x.json.price_cad, 'profit', x.json.est_profit_cad, x.json.flags));
 N['Shortlist'] = run('7-shortlist.js', N['Finance'], N, sd);
 console.log('order', N['Shortlist'][0].json.top.map(p => p.pid));
-const ai = { choices: [{ message: { content: '{"notes":[{"n":1,"note":"Pet owners; returns if sizing off."}]}' } }] };
-console.log(run('8-report.js', [{ json: ai }], N, sd)[0].json.report);
-console.log('--- no AI:', run('8-report.js', [{ json: { error: 'x' } }], N, sd)[0].json.report.length > 100);
+const ai = { choices: [{ message: { content: '{"notes":[{"n":1,"note":"Home cooks; quality varies."}]}' } }] };
+N['Report'] = run('8-report.js', [{ json: ai }], N, sd);
+N['Report'].forEach(r => console.log('photo:', r.json.photo || '(none)', '|', r.json.caption.split('\n').slice(0, 2).join(' / ')));
+const sent = N['Report'].map((r, i) => ({ json: i === 1 ? { error: { message: 'Bad Request: wrong file identifier' } } : { ok: true } }));
+const sum = run('10-summary.js', sent, N, sd)[0].json.report;
+console.log('--- summary message:\n' + sum);
+console.log('--- no AI ok:', run('8-report.js', [{ json: { error: 'x' } }], N, sd).length === N['Report'].length);
 console.log(run('9-empty.js', [{ json: { empty: true, notes: ['search "x": CJ said bad token'] } }], N, sd)[0].json.report);

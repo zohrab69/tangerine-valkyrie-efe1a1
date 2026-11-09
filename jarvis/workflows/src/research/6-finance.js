@@ -31,6 +31,7 @@ $input.all().forEach((item, idx) => {
   else if (maxDays(ship) > F.max_days) flags.push('slow delivery (' + ship.days + ' days)');
   if (price > F.max_retail_cad) flags.push('price above ' + F.max_retail_cad + ' CAD');
   if (profit < 8) flags.push('thin profit');
+  if (p.demand_score < 20) flags.push('unproven demand (few stores sell it yet)');
   out.push({ json: { ...p, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),
                      est_profit_cad: profit, margin_pct: Math.round(profit / price * 100), flags,
                      estimate_note: 'Estimates from CJ quotes; excludes sales tax, duties and samples.' } });

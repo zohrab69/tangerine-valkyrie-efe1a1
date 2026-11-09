@@ -8,7 +8,7 @@ const CONFIG = {
     'yoga accessories', 'garden tools', 'cleaning brush', 'desk organizer', 'travel accessories',
   ],
   per_run: 3,              // searches per run (CJ allows about 1 request per second)
-  page_size: 20,
+  page_size: 50,           // CJ sorts by how many stores list each product (orderBy=listedNum)
 };
 const store = $getWorkflowStaticData('global');
 const start = (store.kwIndex || 0) % CONFIG.keywords.length;

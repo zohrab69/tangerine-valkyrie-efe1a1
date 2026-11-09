@@ -262,7 +262,7 @@ rn = [
       "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\n"
       "Runs every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
       "gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\n"
-      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send report*.\n"
+      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo* and *Send report*. Check each one after import: n8n may auto-pick the wrong credential.\n"
       "All money figures are estimates. Nothing is ordered or published."}),
   node("r1", "Every Monday 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
        {"rule": {"interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 10}]}}),
@@ -279,7 +279,8 @@ rn = [
        "method": "GET", "url": CJ + "/product/list",
        "sendQuery": True, "queryParameters": {"parameters": [
            {"name": "pageNum", "value": "1"}, {"name": "pageSize", "value": "={{ $json.page_size }}"},
-           {"name": "productNameEn", "value": "={{ $json.keyword }}"}]},
+           {"name": "productNameEn", "value": "={{ $json.keyword }}"},
+           {"name": "orderBy", "value": "listedNum"}]},
        "sendHeaders": True, "headerParameters": TOKEN_HDR, "options": THROTTLE}, onError="continueRegularOutput"),
   node("r9", "Screen products", "n8n-nodes-base.code", 2, [1540, 100], {"jsCode": rcode("4-screen.js")}),
   ifnode("r10", "Nothing found?", [1760, 100], "={{ $json.empty === true }}"),
@@ -303,7 +304,12 @@ rn = [
        "options": {"timeout": 90000}}, onError="continueRegularOutput"),
   node("r17", "Report", "n8n-nodes-base.code", 2, [3300, 200], {"jsCode": rcode("8-report.js")}),
   node("r18", "Nothing-found report", "n8n-nodes-base.code", 2, [3300, 0], {"jsCode": rcode("9-empty.js")}),
-  node("r19", "Send report", "n8n-nodes-base.telegram", 1.2, [3520, 100], {
+  node("r20", "Send product photo", "n8n-nodes-base.telegram", 1.2, [3520, 300], {
+       "operation": "sendPhoto", "chatId": OWNER_CHAT_ID, "binaryData": False, "file": "={{ $json.photo }}",
+       "additionalFields": {"caption": "={{ $json.caption }}", "parse_mode": "HTML"}},
+       onError="continueRegularOutput"),
+  node("r22", "Summary", "n8n-nodes-base.code", 2, [3960, 300], {"jsCode": rcode("10-summary.js")}),
+  node("r19", "Send report", "n8n-nodes-base.telegram", 1.2, [4180, 100], {
        "chatId": OWNER_CHAT_ID, "text": "={{ $json.report }}",
        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
 ]
@@ -315,7 +321,7 @@ links = [L("Every Monday 10:00", "Research plan"), L("Run now (manual)", "Resear
          L("Nothing found?", "Nothing-found report", 0), L("Nothing found?", "CJ variants", 1),
          L("CJ variants", "Pick variant"), L("Pick variant", "CJ shipping to Canada"), L("CJ shipping to Canada", "Finance (no AI)"),
          L("Finance (no AI)", "Shortlist"), L("Shortlist", "AI notes (free)"), L("AI notes (free)", "Report"),
-         L("Report", "Send report"), L("Nothing-found report", "Send report")]
+         L("Report", "Send product photo"), L("Send product photo", "Summary"), L("Summary", "Send report"), L("Nothing-found report", "Send report")]
 rc = {}
 for a, out, b in links:
     outs = rc.setdefault(a, {"main": []})["main"]
