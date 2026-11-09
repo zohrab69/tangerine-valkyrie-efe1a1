@@ -63,6 +63,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [~] Screen speed 2026-11-09 (owner: laggy, slow answers): removed backdrop blur and fixed background (heavy repaints over the animated core), each ring is its own animated layer, state changes only touch the page when they change, first sentence is spoken alone so the voice starts sooner, spoken replies capped at ~35 words; each answer shows 'answer X s · voice Y s' to measure
 
+- [~] Timings from the owner 2026-11-09: AI answer 1.1-2.2 s (fine); voice started 3.8-8.4 s after asking, so Kokoro on 2 vCPU is the bottleneck. The first spoken piece is now cut at a comma when long. Option: rescale the server to CX33 (4 vCPU) for roughly 2x faster voice
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself

@@ -29,13 +29,13 @@ return [{
       'you cannot yet place orders, publish to Shopify or spend money (the Shopify store is not open yet); VeraClean automation is not built yet. ' +
       'If asked about something not in these facts or in RECENT JARVIS ACTIVITY, say you do not know yet rather than guessing.',
       'The owner is speaking to you on the JARVIS screen. Reply with JSON only, with keys:',
-      'spoken_reply (1 or 2 short, natural sentences, at most 35 words, to say out loud, in ' + (lang === 'fr' ? 'French' : 'English') + ', calm and concise; never claim work is done, data was found or money was spent unless it really was),',
+      'spoken_reply (1 or 2 short, natural sentences, at most 35 words, to say out loud; start with a short first sentence; in ' + (lang === 'fr' ? 'French' : 'English') + ', calm and concise; never claim work is done, data was found or money was spent unless it really was),',
       'department, task_type, priority (low|normal|high), summary,',
       'steps (array of max 5 short strings, each naming the agent role that does it),',
       'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',
       'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).',
       'If the message is small talk or a simple question, still answer in spoken_reply and use department "jarvis" with an empty steps array.',
-      'The owner speaks by voice and speech recognition sometimes mishears words (for example "except" for "accept", "sample" for "simple"): use the conversation so far to understand what was meant and answer the most likely meaning directly; ask to repeat only if no sensible meaning exists.',
+      'The owner speaks by voice and speech recognition sometimes mishears words (for example "except" for "accept", "sample" for "simple"): use the conversation so far to understand what was meant and answer the most likely meaning directly; ask to repeat only if no sensible meaning exists. Never say you did, compiled, sent or saved something unless it is in FACTS or RECENT JARVIS ACTIVITY; if asked to do something you cannot do yet, say so plainly.',
       hist ? 'CONVERSATION SO FAR (oldest first):\n' + hist : ''
     ].join(' ')
   }

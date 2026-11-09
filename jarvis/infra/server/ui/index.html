@@ -250,6 +250,12 @@
     for (const p of parts.map(x => x.trim()).filter(Boolean)) {
       if (out.length > 1 && out[out.length - 1].length < 60) out[out.length - 1] += ' ' + p; else out.push(p);
     }
+    // The voice is generated on a small server: make the FIRST piece short (cut at a comma/semicolon/dash)
+    // so you hear JARVIS sooner; the rest is generated while the first piece plays.
+    if (out.length && out[0].length > 70) {
+      const m = out[0].slice(20, 70).match(/^(.*[,;:–—])\s/);
+      if (m) { const cut = 20 + m[1].length; out.splice(0, 1, out[0].slice(0, cut).trim(), out[0].slice(cut).trim()); }
+    }
     return out;
   }
   async function fetchVoice(t) {
