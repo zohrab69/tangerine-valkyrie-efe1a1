@@ -13,6 +13,9 @@ echo "==> Screen files"
 mkdir -p "$APP/jarvis-ui"
 cp ui/index.html "$APP/jarvis-ui/index.html"
 
+echo "==> JARVIS voice (Piper, free and offline). First time: builds for a few minutes"
+rm -rf "$APP/tts" && cp -r tts "$APP/tts"
+
 echo "==> Key between the screen and n8n"
 if ! grep -q '^VOICE_SECRET=' "$APP/.env"; then
   echo "VOICE_SECRET=$(openssl rand -hex 32)" >> "$APP/.env"
@@ -32,6 +35,12 @@ cp compose.yml "$APP/compose.yml"
 bash ./caddy-config.sh
 cd "$APP"
 docker compose config --quiet
+docker compose build -q jarvis-tts
+docker compose up -d jarvis-tts
+for i in $(seq 1 30); do
+  docker compose exec -T jarvis-tts python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:5000/health',timeout=3)" 2>/dev/null && break; sleep 2
+done
+echo "   voice service: $(docker compose exec -T jarvis-tts python -c "import urllib.request,json;print(urllib.request.urlopen('http://127.0.0.1:5000/health',timeout=3).read().decode())" 2>/dev/null || echo 'NOT READY')"
 docker compose up -d caddy
 docker compose restart caddy >/dev/null
 

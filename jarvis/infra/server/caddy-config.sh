@@ -31,6 +31,9 @@ $JARVIS_HOST {
     rewrite * /healthz
     reverse_proxy n8n:5678
   }
+  handle /api/speak {
+    reverse_proxy jarvis-tts:5000
+  }
   handle /api/ask {
     rewrite * /webhook/jarvis-voice
     reverse_proxy n8n:5678 {

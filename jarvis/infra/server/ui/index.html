@@ -208,17 +208,39 @@
     for (const re of pref) { const v = pool.find(x => re.test(x.name) || re.test(x.lang)); if (v) return v; }
     return pool[0] || null;
   }
-  function speak(text) {
-    say.textContent = text;
-    if (!voiceOn || !window.speechSynthesis) { followUntil = Date.now() + 8000; idleState(); return; }
+  // JARVIS's own voice comes from the server (Piper, free, offline). If that fails, the browser voice is used.
+  let audioEl = null;
+  function doneSpeaking() { speaking = false; followUntil = Date.now() + 8000; idleState(); }
+  function stopSpeaking() {
+    if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    speaking = false;
+  }
+  function browserSpeak(text) {
+    if (!window.speechSynthesis) { doneSpeaking(); return; }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     const v = pickVoice(); if (v) u.voice = v;
     u.lang = v ? v.lang : (lang === 'fr' ? 'fr-CA' : 'en-GB'); u.rate = 1.0; u.pitch = 0.95;
-    u.onstart = () => setState('speaking', lang === 'fr' ? 'je parle' : 'speaking');
-    speaking = true;
-    u.onend = u.onerror = () => { speaking = false; followUntil = Date.now() + 8000; idleState(); };
+    u.onend = u.onerror = doneSpeaking;
     speechSynthesis.speak(u);
+  }
+  async function speak(text) {
+    say.textContent = text;
+    if (!voiceOn || !text) { followUntil = Date.now() + 8000; idleState(); return; }
+    stopSpeaking();
+    speaking = true; setState('speaking', lang === 'fr' ? 'je parle' : 'speaking');
+    try {
+      const r = await fetch('api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ text, lang, format: 'wav' }) });
+      if (!r.ok) throw new Error('voice ' + r.status);
+      const url = URL.createObjectURL(await r.blob());
+      const a = new Audio(url); audioEl = a;
+      a.onended = a.onerror = () => { URL.revokeObjectURL(url); if (audioEl === a) { audioEl = null; doneSpeaking(); } };
+      await a.play();
+    } catch (e) {
+      audioEl = null; browserSpeak(text);
+    }
   }
 
   // ---------- asking JARVIS ----------
@@ -268,7 +290,7 @@
   if (!SR) $('hint').textContent = 'Voice input needs Google Chrome or Microsoft Edge. You can still type below.';
   function startListen() {
     if (!SR || listening || busy || handsFree) return;
-    if (window.speechSynthesis) speechSynthesis.cancel();
+    stopSpeaking();
     rec = new SR(); rec.lang = lang === 'fr' ? 'fr-CA' : 'en-CA'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
     finalText = ''; listening = true; heard.textContent = ''; say.textContent = '';
     $('talk').classList.add('active'); setState('listening', lang === 'fr' ? "j'écoute" : 'listening');
@@ -348,7 +370,7 @@
   const typing = () => document.activeElement === $('text');
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' && !typing() && !e.repeat) { e.preventDefault(); startListen(); }
-    if (e.key === 'Escape') { if (window.speechSynthesis) speechSynthesis.cancel(); speaking = false; stopListen(); idleState(); }
+    if (e.key === 'Escape') { stopSpeaking(); stopListen(); idleState(); }
   });
   document.addEventListener('keyup', e => { if (e.code === 'Space' && !typing()) { e.preventDefault(); stopListen(); } });
   for (const el of [$('talk'), core]) {
@@ -358,7 +380,7 @@
   $('text').addEventListener('keydown', e => { if (e.key === 'Enter') { const t = e.target.value; e.target.value = ''; ask(t); } });
   $('lang').onclick = () => { lang = lang === 'en' ? 'fr' : 'en'; store.set('lang', lang); applyLang(); tick();
     if (handsFree && hf) { hf.onend = null; try { hf.stop(); } catch {} startHandsFree(); idleState(); } };
-  $('mute').onclick = () => { voiceOn = !voiceOn; store.set('voice', voiceOn ? '1' : '0'); applyVoice(); if (!voiceOn && window.speechSynthesis) speechSynthesis.cancel(); };
+  $('mute').onclick = () => { voiceOn = !voiceOn; store.set('voice', voiceOn ? '1' : '0'); applyVoice(); if (!voiceOn) { stopSpeaking(); idleState(); } };
   $('full').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
   setState('standby');
 })();

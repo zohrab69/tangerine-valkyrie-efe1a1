@@ -116,3 +116,11 @@ services:
     volumes: [omniroute-data:/app/data]
     mem_limit: 1536m
     networks: [jarvis-net]
+
+  jarvis-tts:
+    # JARVIS voice: Piper text-to-speech, free and offline (see tts/Dockerfile). Internal only.
+    build: ./tts
+    image: jarvis-tts:local
+    restart: unless-stopped
+    mem_limit: 512m
+    networks: [jarvis-net]

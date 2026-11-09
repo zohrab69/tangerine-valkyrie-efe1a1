@@ -262,7 +262,7 @@ rn = [
       "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\n"
       "Runs every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
       "gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\n"
-      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*; **OpenAI** in *JARVIS voice (OpenAI)* (a few seconds of speech, well under 1 cent). Check each one after import: n8n may auto-pick the wrong credential.\n"
+      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\n"
       "All money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message)."}),
   node("r1", "Every Monday 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
        {"rule": {"interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 10}]}}),
@@ -310,9 +310,8 @@ rn = [
        onError="continueRegularOutput"),
   node("r22", "Summary", "n8n-nodes-base.code", 2, [3960, 300], {"jsCode": rcode("10-summary.js")}),
   node("r23", "What JARVIS says", "n8n-nodes-base.code", 2, [4400, 100], {"jsCode": rcode("11-voice-text.js")}),
-  node("r24", "JARVIS voice (OpenAI)", "n8n-nodes-base.httpRequest", 4.2, [4620, 100], {
-       "method": "POST", "url": "https://api.openai.com/v1/audio/speech",
-       "authentication": "predefinedCredentialType", "nodeCredentialType": "openAiApi",
+  node("r24", "JARVIS voice (Piper, free)", "n8n-nodes-base.httpRequest", 4.2, [4620, 100], {
+       "method": "POST", "url": "http://jarvis-tts:5000/speak",
        "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.tts_body) }}",
        "options": {"timeout": 60000, "response": {"response": {"responseFormat": "file", "outputPropertyName": "data"}}}},
        onError="continueErrorOutput"),
@@ -332,7 +331,7 @@ links = [L("Every Monday 10:00", "Research plan"), L("Run now (manual)", "Resear
          L("CJ variants", "Pick variant"), L("Pick variant", "CJ shipping to Canada"), L("CJ shipping to Canada", "Finance (no AI)"),
          L("Finance (no AI)", "Shortlist"), L("Shortlist", "AI notes (free)"), L("AI notes (free)", "Report"),
          L("Report", "Send product photo"), L("Send product photo", "Summary"), L("Summary", "Send report"), L("Nothing-found report", "Send report"),
-         L("Send report", "What JARVIS says"), L("What JARVIS says", "JARVIS voice (OpenAI)"), L("JARVIS voice (OpenAI)", "Send voice message", 0)]
+         L("Send report", "What JARVIS says"), L("What JARVIS says", "JARVIS voice (Piper, free)"), L("JARVIS voice (Piper, free)", "Send voice message", 0)]
 rc = {}
 for a, out, b in links:
     outs = rc.setdefault(a, {"main": []})["main"]

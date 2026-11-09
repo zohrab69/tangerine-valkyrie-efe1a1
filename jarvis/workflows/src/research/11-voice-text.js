@@ -1,4 +1,4 @@
-// What JARVIS says out loud after the report. Short, factual, and only about what really happened.
+// What JARVIS says out loud after the report (spoken by the free Piper voice on the server). Short, factual, and only about what really happened.
 let top = [];
 try { top = $('Shortlist').first().json.top || []; } catch (e) { top = []; }
 const hNum = Number(new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })) % 24;
@@ -15,5 +15,4 @@ if (top.length) {
 } else {
   text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;
 }
-return [{ json: { tts_body: { model: 'gpt-4o-mini-tts', voice: 'onyx', response_format: 'mp3', input: text.slice(0, 1000),
-  instructions: 'Calm, polite, confident British AI assistant. Clear and slightly formal. Moderate pace.' }, spoken_text: text } }];
+return [{ json: { tts_body: { text: text.slice(0, 1200), lang: 'en', format: 'mp3' }, spoken_text: text } }];
