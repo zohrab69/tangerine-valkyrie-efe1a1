@@ -35,8 +35,11 @@ cp compose.yml "$APP/compose.yml"
 bash ./caddy-config.sh
 cd "$APP"
 docker compose config --quiet
-docker compose build -q jarvis-tts
-docker compose up -d jarvis-tts
+if docker compose build -q jarvis-tts || { echo "   build failed, retrying once in 20 s..."; sleep 20; docker compose build -q jarvis-tts; }; then
+  docker compose up -d jarvis-tts
+else
+  echo "   WARNING: new voice could not be built (download problem). Keeping the current voice; run this script again later."
+fi
 for i in $(seq 1 30); do
   docker compose exec -T jarvis-tts python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:5000/health',timeout=3)" 2>/dev/null && break; sleep 2
 done
