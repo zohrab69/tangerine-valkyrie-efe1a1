@@ -1,5 +1,7 @@
 """JARVIS voice service: POST /speak {"text": "...", "lang": "en"|"fr", "format": "wav"|"mp3"} -> audio.
 
+English uses Kokoro (human-like), French uses Piper. If Kokoro cannot load, English falls back to Piper.
+Voice: env JARVIS_VOICE (Kokoro voice id, e.g. bm_george, bm_lewis, am_michael). Speed: env JARVIS_SPEED.
 Internal only (Docker network + password-protected JARVIS site). No external calls at runtime.
 """
 import io
@@ -12,11 +14,35 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from piper import PiperVoice, SynthesisConfig
 
+try:
+    import numpy as np
+    import onnxruntime as rt
+    from kokoro_onnx import Kokoro
+except Exception:  # Kokoro not installed: Piper only
+    Kokoro = None
+
 VOICE_DIR = os.environ.get("VOICE_DIR", "/voices")
 VOICES = {"en": "en_GB-alan-medium", "fr": "fr_FR-tom-medium"}
 MAX_CHARS = 1500
 LOCK = threading.Lock()          # one synthesis at a time: keeps memory and CPU low
 _loaded = {}
+KOKORO_VOICE = os.environ.get("JARVIS_VOICE", "bm_george")
+SPEED = float(os.environ.get("JARVIS_SPEED", "1.05"))
+_kokoro = None
+
+
+def kokoro():
+    global _kokoro
+    if _kokoro is None and Kokoro is not None:
+        try:
+            so = rt.SessionOptions()
+            so.intra_op_num_threads = 2
+            sess = rt.InferenceSession(os.path.join(VOICE_DIR, "kokoro.onnx"), so, providers=["CPUExecutionProvider"])
+            _kokoro = Kokoro.from_session(sess, os.path.join(VOICE_DIR, "kokoro-voices.bin"))
+        except Exception as e:
+            print("Kokoro unavailable, using Piper:", type(e).__name__, flush=True)
+            _kokoro = False
+    return _kokoro or None
 
 
 def voice(lang):
@@ -29,9 +55,17 @@ def voice(lang):
 def synth_wav(text, lang):
     buf = io.BytesIO()
     with LOCK:
-        v = voice(lang)
-        with wave.open(buf, "wb") as wav:
-            v.synthesize_wav(text, wav, syn_config=SynthesisConfig(length_scale=0.88))
+        k = kokoro() if lang == "en" else None
+        if k:
+            audio, sr = k.create(text, voice=KOKORO_VOICE, speed=SPEED,
+                                 lang="en-gb" if KOKORO_VOICE.startswith("b") else "en-us")
+            with wave.open(buf, "wb") as wav:
+                wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(sr)
+                wav.writeframes((np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes())
+        else:
+            v = voice(lang)
+            with wave.open(buf, "wb") as wav:
+                v.synthesize_wav(text, wav, syn_config=SynthesisConfig(length_scale=0.88))
     return buf.getvalue()
 
 
@@ -84,6 +118,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    for lang in VOICES:      # load both voices at start so the first request is fast
-        voice(lang)
+    for lang in VOICES:      # load voices at start so the first request is fast
+        try:
+            voice(lang)
+        except Exception as e:
+            print("Piper voice", lang, "unavailable:", type(e).__name__, flush=True)
+    if kokoro():
+        synth_wav("Ready.", "en")   # warm-up
+    print("JARVIS voice ready:", ("Kokoro " + KOKORO_VOICE) if kokoro() else "Piper", flush=True)
     ThreadingHTTPServer(("0.0.0.0", 5000), Handler).serve_forever()

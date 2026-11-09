@@ -118,9 +118,14 @@ services:
     networks: [jarvis-net]
 
   jarvis-tts:
-    # JARVIS voice: Piper text-to-speech, free and offline (see tts/Dockerfile). Internal only.
+    # JARVIS voice, free and offline: Kokoro (English, human-like) + Piper (French). Internal only.
+    # Change the English voice: set JARVIS_VOICE in /opt/jarvis/.env (bm_george, bm_lewis, bm_daniel,
+    # am_michael, am_onyx, am_adam) then: docker compose up -d jarvis-tts
     build: ./tts
     image: jarvis-tts:local
     restart: unless-stopped
-    mem_limit: 512m
+    environment:
+      JARVIS_VOICE: ${JARVIS_VOICE:-bm_george}
+      JARVIS_SPEED: ${JARVIS_SPEED:-1.05}
+    mem_limit: 1g
     networks: [jarvis-net]

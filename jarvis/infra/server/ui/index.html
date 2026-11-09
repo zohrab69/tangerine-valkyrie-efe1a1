@@ -219,13 +219,14 @@
     return pool[0] || null;
   }
   // JARVIS's own voice comes from the server (Piper, free, offline). If that fails, the browser voice is used.
-  let audioEl = null;
+  let audioEl = null, speakId = 0;
   // While JARVIS speaks, the microphone is switched OFF (so it cannot hear and answer itself),
   // then switched back on shortly after it finishes.
   function pauseMic() { if (hf) { hf.onend = null; try { hf.abort(); } catch {} hf = null; } }
   function resumeMic() { if (handsFree && !hf && !speaking) setTimeout(() => { if (handsFree && !hf && !speaking) startHandsFree(); }, 700); }
   function doneSpeaking() { speaking = false; followUntil = Date.now() + 6000; idleState(); resumeMic(); }
   function stopSpeaking() {
+    speakId++;
     if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
     if (window.speechSynthesis) speechSynthesis.cancel();
     speaking = false;
@@ -239,22 +240,52 @@
     u.onend = u.onerror = doneSpeaking;
     speechSynthesis.speak(u);
   }
+  // Speaks sentence by sentence: the first sentence starts playing while the next ones are prepared.
+  function chunks(text) {
+    const parts = String(text).match(/[^.!?…]+[.!?…]+["')\]]*\s*|[^.!?…]+$/g) || [text];
+    const out = [];
+    for (const p of parts.map(x => x.trim()).filter(Boolean)) {
+      if (out.length && out[out.length - 1].length < 40) out[out.length - 1] += ' ' + p; else out.push(p);
+    }
+    return out;
+  }
+  async function fetchVoice(t) {
+    const r = await fetch('api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ text: t, lang, format: 'wav' }) });
+    if (!r.ok) throw new Error('voice ' + r.status);
+    return URL.createObjectURL(await r.blob());
+  }
+  function playUrl(url, id) {
+    return new Promise((resolve, reject) => {
+      if (id !== speakId) { URL.revokeObjectURL(url); return resolve(); }
+      const a = new Audio(url); audioEl = a;
+      a.onended = () => { URL.revokeObjectURL(url); resolve(); };
+      a.onerror = () => { URL.revokeObjectURL(url); reject(new Error('play')); };
+      a.play().catch(reject);
+    });
+  }
   async function speak(text) {
     say.textContent = text;
     if (!voiceOn || !text) { followUntil = Date.now() + 6000; idleState(); return; }
     stopSpeaking();
     pauseMic(); lastSpoken = text;
+    const id = ++speakId;
     speaking = true; setState('speaking', lang === 'fr' ? 'je parle' : 'speaking');
+    const parts = chunks(text);
     try {
-      const r = await fetch('api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ text, lang, format: 'wav' }) });
-      if (!r.ok) throw new Error('voice ' + r.status);
-      const url = URL.createObjectURL(await r.blob());
-      const a = new Audio(url); audioEl = a;
-      a.onended = a.onerror = () => { URL.revokeObjectURL(url); if (audioEl === a) { audioEl = null; doneSpeaking(); } };
-      await a.play();
+      let next = fetchVoice(parts[0]);
+      for (let i = 0; i < parts.length; i++) {
+        const url = await next;
+        next = i + 1 < parts.length ? fetchVoice(parts[i + 1]) : null;
+        if (next) next.catch(() => {});
+        await playUrl(url, id);
+        if (id !== speakId) return;          // interrupted (Esc, new answer, voice off)
+      }
+      audioEl = null;
+      if (id === speakId) doneSpeaking();
     } catch (e) {
-      audioEl = null; browserSpeak(text);
+      if (id !== speakId) return;
+      audioEl = null; browserSpeak(text);     // server voice unavailable: use the browser voice
     }
   }
 
