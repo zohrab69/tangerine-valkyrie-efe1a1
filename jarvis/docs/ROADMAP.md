@@ -52,6 +52,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Shortlist of 3-5 Canadian products with sources, landed cost, fees, tax and shipping time, all marked as estimates
 - [ ] Owner review: approve or reject, logged
 
+- [~] **Sample requests (owner asked 2026-11-09):** `jarvis-telegram-v5.json`. Reply "sample" (qty 1-3) to a research product photo -> CJ product/variant + real shipping to Canada -> approval buttons -> on approval, exact CJ ordering steps (no automatic purchase until CJ ordering is connected and tested). Offline-tested
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself

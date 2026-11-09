@@ -62,7 +62,7 @@ print("wrote jarvis-ceo-v0.json")
 # Multi-provider workflows: a chain of "Use X? -> Call X -> Got X" blocks, falling through on error.
 R = "$('Router (multi-AI)').first().json"
 
-def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme, front=None, tail=None):
+def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme, front=None, tail=None, extra=None):
     # front: (nodes, connections, last_node_name) replacing the manual Start + Owner request
     # tail:  (nodes, connections, sink_node_name) that receives both the result and the "unavailable" message
     if front is None:
@@ -114,6 +114,9 @@ def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme,
         sinks = tail[2] if isinstance(tail[2], tuple) else (tail[2], tail[2])
         for src, dst in zip(("Parse, cost & log", "All AIs unavailable: ask owner"), sinks):
             c[src] = {"main": [[{"node": dst, "type": "main", "index": 0}]]}
+    if extra is not None:
+        n += extra[0]
+        c.update(extra[1])
     wf = {"name": wf_name, "nodes": n, "connections": c,
           "settings": {"executionOrder": "v1", "saveManualExecutions": True}, "pinData": {}}
     (here.parent / file_name).write_text(json.dumps(wf, indent=2) + "\n")
@@ -341,3 +344,85 @@ wfr = {"name": "JARVIS Research v1 (CJ products)", "nodes": rn, "connections": r
        "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}
 (here.parent / "jarvis-research-v1.json").write_text(json.dumps(wfr, indent=2) + "\n")
 print("wrote jarvis-research-v1.json")
+
+# ---------------------------------------------------------------------------
+# Telegram v5 = v4 + "sample" action: reply to a product photo from the research report.
+def scode(f): return (here / "sample" / f).read_text()
+def lnk(c, a, b, out=0):
+    outs = c.setdefault(a, {"main": []})["main"]
+    while len(outs) <= out: outs.append([])
+    outs[out].append({"node": b, "type": "main", "index": 0})
+v5_front_nodes = [
+  node("t1", "Telegram Trigger", "n8n-nodes-base.telegramTrigger", 1.2, [-400, 400],
+       {"updates": ["message"], "additionalFields": {}}, webhookId="1fd950cf-288c-4312-a020-1d3c27a80a42"),
+  tg_front[0][1],   # Only the owner?
+  ifnode("t4", "Reply to a product photo?", [-100, 400],
+         "={{ /CJ SKU\\s+\\S+/.test($json.message?.reply_to_message?.caption ?? '') }}"),
+  tg_front[0][2],   # Owner request (Telegram)
+]
+v5_front_conns = {}
+lnk(v5_front_conns, "Telegram Trigger", "Only the owner?")
+lnk(v5_front_conns, "Only the owner?", "Reply to a product photo?")
+lnk(v5_front_conns, "Reply to a product photo?", "Read the reply", 0)
+lnk(v5_front_conns, "Reply to a product photo?", "Owner request (Telegram)", 1)
+Y = 1500
+sn = [
+  node("s1", "Read the reply", "n8n-nodes-base.code", 2, [100, Y], {"jsCode": scode("1-read-reply.js")}),
+  ifnode("s2", "Need a CJ token?", [320, Y], "={{ $json.need_token === true }}"),
+  node("s3", "CJ get token", "n8n-nodes-base.httpRequest", 4.2, [540, Y - 120], {
+       "method": "POST", "url": CJ + "/authentication/getAccessToken",
+       "authentication": "genericCredentialType", "genericAuthType": "httpCustomAuth",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={}", "options": {"timeout": 30000}},
+       onError="continueRegularOutput"),
+  node("s4", "Save token", "n8n-nodes-base.code", 2, [760, Y - 120], {"jsCode": scode("2-save-token.js")}),
+  node("s5", "With token", "n8n-nodes-base.code", 2, [980, Y], {"jsCode": "return $input.all();"}),
+  node("s6", "CJ product details", "n8n-nodes-base.httpRequest", 4.2, [1200, Y], {
+       "method": "GET", "url": CJ + "/product/query",
+       "sendQuery": True, "queryParameters": {"parameters": [{"name": "productSku", "value": "={{ $json.sku }}"}]},
+       "sendHeaders": True, "headerParameters": TOKEN_HDR, "options": {"timeout": 30000}}, onError="continueRegularOutput"),
+  node("s7", "Pick variant", "n8n-nodes-base.code", 2, [1420, Y], {"jsCode": scode("3-pick.js")}),
+  ifnode("s8", "Product OK?", [1640, Y], "={{ !$json.problem }}"),
+  node("s9", "CJ shipping to Canada", "n8n-nodes-base.httpRequest", 4.2, [1860, Y - 120], {
+       "method": "POST", "url": CJ + "/logistic/freightCalculate",
+       "sendHeaders": True, "headerParameters": TOKEN_HDR,
+       "sendBody": True, "specifyBody": "json",
+       "jsonBody": "={{ JSON.stringify({ startCountryCode: 'CN', endCountryCode: 'CA', products: [{ quantity: $json.qty, vid: $json.vid }] }) }}",
+       "options": {"timeout": 30000}}, onError="continueRegularOutput"),
+  node("s10", "Sample plan", "n8n-nodes-base.code", 2, [2080, Y - 120], {"jsCode": scode("4-plan.js")}),
+  ifnode("s11", "Plan OK?", [2300, Y - 120], "={{ !$json.problem }}"),
+  node("s12", "Ask owner: approve sample?", "n8n-nodes-base.telegram", 1.2, [2520, Y - 240], {
+       "operation": "sendAndWait", "chatId": OWNER_CHAT_ID, "message": "={{ $json.approval_text }}",
+       "responseType": "approval",
+       "approvalOptions": {"values": {"approvalType": "double", "approveLabel": "✅ Approve sample", "disapproveLabel": "❌ Decline"}},
+       "options": {"limitWaitTime": {"values": {"limitType": "afterTimeInterval", "resumeAmount": 48, "resumeUnit": "hours"}},
+                   "appendAttribution": False}}, webhookId="2d3a63f6-f92d-4ea0-8b56-25a162d21459"),
+  node("s13", "Sample result", "n8n-nodes-base.code", 2, [2760, Y], {"jsCode": scode("5-after.js")}),
+  node("s14", "Reply: sample", "n8n-nodes-base.telegram", 1.2, [2980, Y], {
+       "chatId": OWNER_CHAT_ID, "text": "={{ $json.reply_text }}",
+       "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
+  node("s0", "Sample README", "n8n-nodes-base.stickyNote", 1, [80, Y - 420], {"width": 1100, "height": 180, "content":
+       "## Sample order (reply to a product photo)\n"
+       "Reply **sample** (optionally a quantity 1-3) to a product photo from the research report. JARVIS looks up the product and the real shipping cost to Canada on CJ, "
+       "then asks you to approve. Approving does not buy anything: JARVIS then sends you the exact steps to order at CJ.\n"
+       "Credentials: **CJ API key** in *CJ get token*; **JARVIS Telegram** in *Ask owner: approve sample?* and *Reply: sample*."}),
+]
+sc = {}
+lnk(sc, "Read the reply", "Need a CJ token?")
+lnk(sc, "Need a CJ token?", "CJ get token", 0); lnk(sc, "Need a CJ token?", "With token", 1)
+lnk(sc, "CJ get token", "Save token"); lnk(sc, "Save token", "With token")
+lnk(sc, "With token", "CJ product details"); lnk(sc, "CJ product details", "Pick variant")
+lnk(sc, "Pick variant", "Product OK?")
+lnk(sc, "Product OK?", "CJ shipping to Canada", 0); lnk(sc, "Product OK?", "Sample result", 1)
+lnk(sc, "CJ shipping to Canada", "Sample plan"); lnk(sc, "Sample plan", "Plan OK?")
+lnk(sc, "Plan OK?", "Ask owner: approve sample?", 0); lnk(sc, "Plan OK?", "Sample result", 1)
+lnk(sc, "Ask owner: approve sample?", "Sample result"); lnk(sc, "Sample result", "Reply: sample")
+v5_front_conns.pop("Owner request (Telegram)", None)
+chain_workflow("JARVIS Telegram v5 (approvals + samples)", "jarvis-telegram-v5.json", "omniroute-router.js",
+    ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
+    lambda p: HEADER,
+    "## JARVIS Telegram v5 - talk, approve, and request samples from your phone\n"
+    "Normal messages: JARVIS turns them into work orders; risky ones need your Approve / Decline (48 h).\n"
+    "**Reply \"sample\" to a product photo** from the research report: JARVIS prices a sample with real shipping to Canada and asks your approval (see the lower part).\n"
+    "Setup: **JARVIS Telegram** in every Telegram node, **OmniRoute** in both *Call* nodes, **CJ API key** in *CJ get token*. Check each one after import. "
+    "Unpublish v4 first (one Telegram trigger per bot), then Publish v5.",
+    front=(v5_front_nodes, v5_front_conns, "Owner request (Telegram)"), tail=tg_tail, extra=(sn, sc))
