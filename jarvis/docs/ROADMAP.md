@@ -61,6 +61,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [ ] Rename the assistant later (owner, 2026-11-09): screen title, wake word (2-3 distinctive syllables; keep "JARVIS" as a second wake word during the switch), self-introduction in prompts and voice text, and the Telegram bot name via BotFather /setname
 
+- [~] Screen speed 2026-11-09 (owner: laggy, slow answers): removed backdrop blur and fixed background (heavy repaints over the animated core), each ring is its own animated layer, state changes only touch the page when they change, first sentence is spoken alone so the voice starts sooner, spoken replies capped at ~35 words; each answer shows 'answer X s · voice Y s' to measure
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
