@@ -5,3 +5,5 @@ jarvis/infra/stack/.env
 *.tar.gz
 *-container-*.json
 jarvis-backups/
+__pycache__/
+*.pyc
