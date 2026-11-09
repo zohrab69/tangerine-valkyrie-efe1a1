@@ -41,8 +41,9 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [ ] Second provider key (Anthropic or OpenRouter) for fallback and independent review, when budget allows
 
 ## Phase 3: First real product research (NEXT after Phase 2)
-- [~] `workflows/jarvis-research-v1.json` (2026-11-08): CJ Dropshipping API (product list, variants, real shipping quotes to Canada) -> exclusions (electronics, cosmetics, kids, food, medical) -> finance math without AI -> free-AI notes -> Telegram top 5. Weekly Monday 10:00 + manual. Built from CJ API names found by search (CJ docs host blocked from the build session); code tolerates field-name variants; offline-tested with mock data; first live run will confirm
-- [ ] Owner: CJ account + API key (My CJ > Authorization > API), n8n Custom Auth credential `CJ API key`
+- [x] **First real research report 2026-11-09** (CJ live: token, search, variants, shipping CN->CA quotes, finance, Telegram). Observations: CJ `listedNum` was 0-1 for most results, so the demand signal is weak; shipping (8-11 USD) dominates landed cost; 4-8 day quotes need confirming with a sample. Credential gotcha: n8n auto-selects the newest Header Auth credential on import, so check every HTTP node. Workflow: `workflows/jarvis-research-v1.json` (2026-11-08): CJ Dropshipping API (product list, variants, real shipping quotes to Canada) -> exclusions (electronics, cosmetics, kids, food, medical) -> finance math without AI -> free-AI notes -> Telegram top 5. Weekly Monday 10:00 + manual. Built from CJ API names found by search (CJ docs host blocked from the build session); code tolerates field-name variants; offline-tested with mock data; first live run will confirm
+- [x] Owner: CJ account + API key (Apps > Install App > Others > API), n8n Custom Auth credential `CJ API key` with JSON {"body":{"apiKey":"..."}}
+- [ ] Improve demand signal: sort CJ search by popularity / add a second signal before trusting the ranking
 - [ ] Choose data sources: supplier APIs (CJ / AliExpress dropshipping), TikTok Creative Center and Google Trends exports (manual weekly CSV)
 - [ ] Shortlist of 3-5 Canadian products with sources, landed cost, fees, tax and shipping time, all marked as estimates
 - [ ] Owner review: approve or reject, logged
