@@ -70,6 +70,7 @@
   button.on{border-color:var(--core);color:var(--core)}
   #talk{padding:12px 26px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--core);border-color:var(--core)}
   #talk.active{background:var(--core);color:#03141f}
+  #hands.on{background:rgba(63,211,255,.15)}
   .input{width:min(520px,60vw);border-radius:999px;outline:none} .input:focus{border-color:var(--core)}
   .hint{font-size:12px;color:var(--muted);width:100%;text-align:center}
   @media (max-width:980px){
@@ -148,9 +149,10 @@
     <button id="talk" type="button">Hold to talk</button>
     <input id="text" class="input" placeholder="…or type to JARVIS and press Enter" autocomplete="off">
     <button id="lang" type="button" title="Language">EN</button>
+    <button id="hands" type="button" title="Hands-free: say “JARVIS …”">Hands-free off</button>
     <button id="mute" type="button" class="on" title="Voice replies">Voice on</button>
     <button id="full" type="button" title="Full screen">⛶</button>
-    <div id="hint" class="hint">Space = hold to talk · Enter = send typed text · Esc = stop speaking</div>
+    <div id="hint" class="hint">Space = hold to talk · Hands-free: just say “JARVIS, …” · Enter = send typed text · Esc = stop speaking</div>
   </footer>
 </div>
 
@@ -161,6 +163,9 @@
                   set(k, v) { try { localStorage.setItem('jarvis.' + k, v); } catch {} } };
   const core = $('core'), state = $('state'), heard = $('heard'), say = $('say'), log = $('log');
   let lang = store.get('lang', 'en'), voiceOn = store.get('voice', '1') === '1', busy = false;
+  let handsFree = false, speaking = false, followUntil = 0;
+  const idleState = () => setState(handsFree ? 'listening' : 'standby',
+    handsFree ? (lang === 'fr' ? 'dites « JARVIS »' : 'say “JARVIS”') : (lang === 'fr' ? 'en attente' : 'standby'));
   let stats = { req: 0, cost: 0, appr: 0 };
 
   // ---------- UI helpers ----------
@@ -205,13 +210,14 @@
   }
   function speak(text) {
     say.textContent = text;
-    if (!voiceOn || !window.speechSynthesis) { setState('standby'); return; }
+    if (!voiceOn || !window.speechSynthesis) { followUntil = Date.now() + 8000; idleState(); return; }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     const v = pickVoice(); if (v) u.voice = v;
     u.lang = v ? v.lang : (lang === 'fr' ? 'fr-CA' : 'en-GB'); u.rate = 1.0; u.pitch = 0.95;
     u.onstart = () => setState('speaking', lang === 'fr' ? 'je parle' : 'speaking');
-    u.onend = u.onerror = () => setState('standby', lang === 'fr' ? 'en attente' : 'standby');
+    speaking = true;
+    u.onend = u.onerror = () => { speaking = false; followUntil = Date.now() + 8000; idleState(); };
     speechSynthesis.speak(u);
   }
 
@@ -241,11 +247,11 @@
       if (d.needs_approval) addApproval(d, text);
       if (d.ok === false) setState('error', 'no AI available');
       speak(d.spoken || '');
-      if (d.ok === false) setTimeout(() => setState('standby'), 4000);
+      if (d.ok === false) setTimeout(idleState, 4000);
     } catch (e) {
       const m = e.name === 'AbortError' ? 'The request took too long.' : 'I could not reach the server (' + e.message + ').';
       addMsg('JARVIS', m); setState('error', 'connection problem'); say.textContent = m;
-      setTimeout(() => setState('standby'), 4000);
+      setTimeout(idleState, 4000);
     } finally { clearTimeout(to); busy = false; health(); }
   }
   function addApproval(d, text) {
@@ -261,7 +267,7 @@
   let rec = null, listening = false, finalText = '';
   if (!SR) $('hint').textContent = 'Voice input needs Google Chrome or Microsoft Edge. You can still type below.';
   function startListen() {
-    if (!SR || listening || busy) return;
+    if (!SR || listening || busy || handsFree) return;
     if (window.speechSynthesis) speechSynthesis.cancel();
     rec = new SR(); rec.lang = lang === 'fr' ? 'fr-CA' : 'en-CA'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
     finalText = ''; listening = true; heard.textContent = ''; say.textContent = '';
@@ -281,17 +287,68 @@
     rec.onend = () => {
       listening = false; $('talk').classList.remove('active');
       const t = (finalText || heard.textContent || '').trim();
-      if (t) ask(t); else setState('standby', lang === 'fr' ? 'en attente' : 'standby');
+      if (t) ask(t); else idleState();
     };
     try { rec.start(); } catch { listening = false; }
   }
   function stopListen() { if (rec && listening) { try { rec.stop(); } catch {} } }
 
+  // ---------- hands-free: always listening for "JARVIS ..." ----------
+  // Chrome sends the audio to Google for recognition while this is on. Ignores what is heard while
+  // JARVIS is thinking or speaking (so it does not answer itself). After JARVIS speaks, you have
+  // 8 seconds to reply without saying "JARVIS" again.
+  const WAKE = /\b(jarvis|jarvi|jarviz|jervis|travis|jarvus|harvis)\b[\s,.:!?-]*/i;
+  let hf = null;
+  function heardHandsFree(text) {
+    text = String(text || '').trim(); if (!text || busy || speaking) return;
+    const m = text.match(WAKE);
+    if (m) {
+      const cmd = text.slice(m.index + m[0].length).trim();
+      if (cmd.length > 1) { ask(cmd); }
+      else { followUntil = Date.now() + 8000; speak(lang === 'fr' ? 'Oui ?' : 'Yes?'); }
+    } else if (Date.now() < followUntil) {
+      ask(text);
+    }
+  }
+  window.__jarvisHeard = heardHandsFree;   // used by automated tests only
+  function startHandsFree() {
+    if (!SR) { say.textContent = 'Hands-free needs Google Chrome or Microsoft Edge.'; return false; }
+    hf = new SR(); hf.lang = lang === 'fr' ? 'fr-CA' : 'en-CA'; hf.continuous = true; hf.interimResults = true;
+    hf.onresult = ev => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (!busy && !speaking) { heard.className = 'heard' + (ev.results[i].isFinal ? '' : ' interim'); heard.textContent = t; }
+        if (ev.results[i].isFinal) heardHandsFree(t);
+      }
+    };
+    hf.onerror = ev => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        say.textContent = 'Microphone blocked: click the lock icon in the address bar and allow the microphone.';
+        stopHandsFree();
+      }
+    };
+    hf.onend = () => { if (handsFree) setTimeout(() => { try { hf.start(); } catch {} }, 250); };   // Chrome stops after silence: restart
+    try { hf.start(); } catch {}
+    return true;
+  }
+  function stopHandsFree() {
+    handsFree = false; $('hands').classList.remove('on'); $('hands').textContent = 'Hands-free off';
+    if (hf) { hf.onend = null; try { hf.stop(); } catch {} hf = null; }
+    idleState();
+  }
+  $('hands').onclick = () => {
+    if (handsFree) { stopHandsFree(); return; }
+    handsFree = true; $('hands').classList.add('on'); $('hands').textContent = 'Hands-free on';
+    if (!startHandsFree()) { stopHandsFree(); return; }
+    idleState();
+    speak(lang === 'fr' ? 'Mode mains libres activé. Dites JARVIS quand vous avez besoin de moi.' : "Hands-free mode on. Just say JARVIS when you need me.");
+  };
+
   // hold-to-talk: space bar, TALK button, or the core
   const typing = () => document.activeElement === $('text');
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' && !typing() && !e.repeat) { e.preventDefault(); startListen(); }
-    if (e.key === 'Escape') { if (window.speechSynthesis) speechSynthesis.cancel(); stopListen(); setState('standby'); }
+    if (e.key === 'Escape') { if (window.speechSynthesis) speechSynthesis.cancel(); speaking = false; stopListen(); idleState(); }
   });
   document.addEventListener('keyup', e => { if (e.code === 'Space' && !typing()) { e.preventDefault(); stopListen(); } });
   for (const el of [$('talk'), core]) {
@@ -299,7 +356,8 @@
     el.addEventListener('pointerup', stopListen); el.addEventListener('pointerleave', stopListen);
   }
   $('text').addEventListener('keydown', e => { if (e.key === 'Enter') { const t = e.target.value; e.target.value = ''; ask(t); } });
-  $('lang').onclick = () => { lang = lang === 'en' ? 'fr' : 'en'; store.set('lang', lang); applyLang(); tick(); };
+  $('lang').onclick = () => { lang = lang === 'en' ? 'fr' : 'en'; store.set('lang', lang); applyLang(); tick();
+    if (handsFree && hf) { hf.onend = null; try { hf.stop(); } catch {} startHandsFree(); idleState(); } };
   $('mute').onclick = () => { voiceOn = !voiceOn; store.set('voice', voiceOn ? '1' : '0'); applyVoice(); if (!voiceOn && window.speechSynthesis) speechSynthesis.cancel(); };
   $('full').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
   setState('standby');

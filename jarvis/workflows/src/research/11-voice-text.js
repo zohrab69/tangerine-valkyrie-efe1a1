@@ -9,7 +9,7 @@ let text;
 if (top.length) {
   const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];
   const shortName = best.name.split(/[-,|]/)[0].trim().split(/\s+/).slice(0, 6).join(' ');
-  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} products, with photos, shipping times to Canada and profit estimates. ` +
+  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +
          `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +
          `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;
 } else {
