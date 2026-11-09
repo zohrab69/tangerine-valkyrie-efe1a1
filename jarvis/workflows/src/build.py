@@ -345,6 +345,18 @@ wfr = {"name": "JARVIS Research v1 (CJ products)", "nodes": rn, "connections": r
 (here.parent / "jarvis-research-v1.json").write_text(json.dumps(wfr, indent=2) + "\n")
 print("wrote jarvis-research-v1.json")
 
+
+# Shared memory (n8n data table "jarvis_memory", columns: kind, summary)
+MEMORY_TABLE = {"__rl": True, "mode": "name", "value": "jarvis_memory"}
+def memory_nodes(prefix, src, pos):
+    x, y = pos
+    return [
+      node(prefix + "m1", "Read memory", "n8n-nodes-base.dataTable", 1.1, [x, y], {
+           "resource": "row", "operation": "get", "dataTableId": MEMORY_TABLE,
+           "limit": 3, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+           alwaysOutputData=True, onError="continueRegularOutput"),
+      node(prefix + "m2", "Add memory", "n8n-nodes-base.code", 2, [x + 200, y], {"jsCode": code("memory-add.js").replace("__SRC__", src)}),
+    ]
 # ---------------------------------------------------------------------------
 # Telegram v5 = v4 + "sample" action: reply to a product photo from the research report.
 def scode(f): return (here / "sample" / f).read_text()
@@ -426,6 +438,8 @@ lnk(sc, "CJ shipping to Canada", "Sample plan"); lnk(sc, "Sample plan", "Plan OK
 lnk(sc, "Plan OK?", "Ask owner: approve sample?", 0); lnk(sc, "Plan OK?", "Sample result", 1)
 lnk(sc, "Ask owner: approve sample?", "Sample result"); lnk(sc, "Sample result", "Reply: sample")
 v5_front_conns.pop("Owner request (Telegram)", None)
+v5_front_nodes += memory_nodes("v5", "Owner request (Telegram)", [200, 250])
+lnk(v5_front_conns, "Owner request (Telegram)", "Read memory"); lnk(v5_front_conns, "Read memory", "Add memory")
 chain_workflow("JARVIS Telegram v5 (approvals + samples)", "jarvis-telegram-v5.json", "omniroute-router.js",
     ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
     lambda p: HEADER,
@@ -434,4 +448,35 @@ chain_workflow("JARVIS Telegram v5 (approvals + samples)", "jarvis-telegram-v5.j
     "**Reply \"sample\" to a product photo** from the research report: JARVIS prices a sample with real shipping to Canada and asks your approval (see the lower part).\n"
     "Setup: **JARVIS Telegram** in every Telegram node, **OmniRoute** in both *Call* nodes, **CJ API key** in *CJ get token*. Check each one after import. "
     "Unpublish v4 first (one Telegram trigger per bot), then Publish v5.",
-    front=(v5_front_nodes, v5_front_conns, "Owner request (Telegram)"), tail=tg_tail, extra=(sn, sc))
+    front=(v5_front_nodes, v5_front_conns, "Add memory"), tail=tg_tail, extra=(sn, sc))
+
+# Voice v1 rebuilt with shared memory (overwrites the file written above)
+voice_front_mem = (voice_front[0] + memory_nodes("vo", "Voice request", [200, 250]),
+                   dict(voice_front[1]), "Add memory")
+lnk(voice_front_mem[1], "Voice request", "Read memory"); lnk(voice_front_mem[1], "Read memory", "Add memory")
+chain_workflow("JARVIS Voice v1 (screen)", "jarvis-voice-v1.json", "omniroute-router.js",
+    ["free", "paid"], {"free": "OmniRoute free combo", "paid": "OmniRoute paid combo"},
+    lambda p: HEADER,
+    "## JARVIS Voice v1 - the JARVIS screen\n"
+    "The page at https://jarvis.<server>.sslip.io (password protected) sends your words here. JARVIS answers the screen at once; approvals go to your Telegram with buttons.\n"
+    "JARVIS reads its recent activity from the data table **jarvis_memory** (columns kind, summary) before answering.\n"
+    "Setup: *Webhook* -> Header Auth credential **JARVIS screen key**. **OmniRoute** in both *Call* nodes. **JARVIS Telegram** in *Ask owner to approve* and *Reply on Telegram*. Save, then Publish.",
+    front=voice_front_mem, tail=voice_tail)
+
+# Research: save a memory row after the report
+wfr_path = here.parent / "jarvis-research-v1.json"
+wfr = json.loads(wfr_path.read_text())
+wfr["nodes"] += [
+  node("r26", "Memory text", "n8n-nodes-base.code", 2, [4180, 320], {"jsCode": rcode("12-memory.js")}),
+  node("r27", "Save to memory", "n8n-nodes-base.dataTable", 1.1, [4400, 320], {
+       "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+]
+lnk(wfr["connections"], "Summary", "Memory text"); lnk(wfr["connections"], "Nothing-found report", "Memory text")
+lnk(wfr["connections"], "Memory text", "Save to memory")
+for n in wfr["nodes"]:
+    if n["type"].endswith("stickyNote") and "Research v1" in n["parameters"]["content"]:
+        n["parameters"]["content"] += "\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
+wfr_path.write_text(json.dumps(wfr, indent=2) + "\n")
+print("wrote jarvis-voice-v1.json + research memory")

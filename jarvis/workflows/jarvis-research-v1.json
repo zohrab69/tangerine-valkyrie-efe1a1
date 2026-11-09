@@ -13,7 +13,7 @@
       "parameters": {
         "width": 1500,
         "height": 230,
-        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\nAll money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message)."
+        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\nAll money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message).\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
       }
     },
     {
@@ -526,6 +526,46 @@
           "parse_mode": "HTML"
         }
       }
+    },
+    {
+      "id": "r26",
+      "name": "Memory text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// One memory row so the rest of JARVIS (screen, Telegram) knows what the research report contained.\nlet top = [];\ntry { top = $('Shortlist').first().json.top || []; } catch (e) { top = []; }\nconst plan = $('Research plan').first().json;\nconst day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });\nconst list = top.map((p, i) => `${i + 1}. ${p.name.split(/[-,|]/)[0].trim().slice(0, 60)} (CJ SKU ${p.sku || p.pid}, est. profit ${p.est_profit_cad} CAD, ${p.listed_by_stores} stores)`).join('; ');\nconst summary = `Product research report sent to the owner's Telegram on ${day} (themes: ${plan.keywords.join(', ')}), with photos and a voice message. ` +\n  (top.length ? `Products: ${list}. Estimates only; nothing ordered.` : 'No product passed the filters.');\nreturn [{ json: { kind: 'research', summary: summary.slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "r27",
+      "name": "Save to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4400,
+        320
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -748,6 +788,11 @@
             "node": "Send report",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Memory text",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -757,6 +802,11 @@
         [
           {
             "node": "Send report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Memory text",
             "type": "main",
             "index": 0
           }
@@ -790,6 +840,17 @@
         [
           {
             "node": "Send voice message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory text": {
+      "main": [
+        [
+          {
+            "node": "Save to memory",
             "type": "main",
             "index": 0
           }

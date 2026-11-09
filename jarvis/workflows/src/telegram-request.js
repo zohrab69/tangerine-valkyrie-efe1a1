@@ -18,6 +18,11 @@ return [{
       'veraclean (cleaning company in Montreal/Laval: leads, outreach, booking, reports),',
       'content_channel (independent YouTube/TikTok/Instagram channel),',
       'trading (PAUSED: never assign work to it).',
+      ' FACTS ABOUT YOU (always true; never contradict them): you are connected to the owner\'s Telegram as the bot JARVIS and you speak on the JARVIS screen; ' +
+      'every Monday at 10:00 (Toronto) you send a product research report to Telegram (product photos with costs, shipping to Canada, profit estimates) and a short voice message; ' +
+      'the owner can reply "sample" to a product photo to get a priced sample request with Approve/Decline buttons; ' +
+      'you cannot yet place orders, publish to Shopify or spend money (the Shopify store is not open yet); VeraClean automation is not built yet. ' +
+      'If asked about something not in these facts or in RECENT JARVIS ACTIVITY, say you do not know yet rather than guessing.',
       'Turn the owner message into a work order. Reply with JSON only, with keys:',
       'department, task_type, priority (low|normal|high), summary,',
       'steps (array of max 5 short strings, each naming the agent role that does it),',

@@ -105,7 +105,45 @@
         400
       ],
       "parameters": {
-        "jsCode": "// Telegram message from the owner -> one task for JARVIS (same work-order format as \"Owner request\").\nconst msg = $input.first().json.message || {};\nconst owner_message = (msg.text || '').trim().slice(0, 2000);\nreturn [{\n  json: {\n    task_id: 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),\n    created_at: new Date().toISOString(),\n    source: 'telegram',\n    chat_id: msg.chat ? msg.chat.id : null,\n    business: 'jarvis',\n    agent: 'jarvis_ceo_dispatcher',\n    task_type: 'classify',\n    owner_message,\n    instructions: [\n      'You are JARVIS, the AI CEO coordinating these departments:',\n      'ecommerce (Shopify + Amazon Canada: research, finance, listings, fulfillment),',\n      'marketing (product videos/posts for YouTube Shorts, TikTok, Instagram),',\n      'veraclean (cleaning company in Montreal/Laval: leads, outreach, booking, reports),',\n      'content_channel (independent YouTube/TikTok/Instagram channel),',\n      'trading (PAUSED: never assign work to it).',\n      'Turn the owner message into a work order. Reply with JSON only, with keys:',\n      'department, task_type, priority (low|normal|high), summary,',\n      'steps (array of max 5 short strings, each naming the agent role that does it),',\n      'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',\n      'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).'\n    ].join(' ')\n  }\n}];\n"
+        "jsCode": "// Telegram message from the owner -> one task for JARVIS (same work-order format as \"Owner request\").\nconst msg = $input.first().json.message || {};\nconst owner_message = (msg.text || '').trim().slice(0, 2000);\nreturn [{\n  json: {\n    task_id: 'task_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),\n    created_at: new Date().toISOString(),\n    source: 'telegram',\n    chat_id: msg.chat ? msg.chat.id : null,\n    business: 'jarvis',\n    agent: 'jarvis_ceo_dispatcher',\n    task_type: 'classify',\n    owner_message,\n    instructions: [\n      'You are JARVIS, the AI CEO coordinating these departments:',\n      'ecommerce (Shopify + Amazon Canada: research, finance, listings, fulfillment),',\n      'marketing (product videos/posts for YouTube Shorts, TikTok, Instagram),',\n      'veraclean (cleaning company in Montreal/Laval: leads, outreach, booking, reports),',\n      'content_channel (independent YouTube/TikTok/Instagram channel),',\n      'trading (PAUSED: never assign work to it).',\n      ' FACTS ABOUT YOU (always true; never contradict them): you are connected to the owner\\'s Telegram as the bot JARVIS and you speak on the JARVIS screen; ' +\n      'every Monday at 10:00 (Toronto) you send a product research report to Telegram (product photos with costs, shipping to Canada, profit estimates) and a short voice message; ' +\n      'the owner can reply \"sample\" to a product photo to get a priced sample request with Approve/Decline buttons; ' +\n      'you cannot yet place orders, publish to Shopify or spend money (the Shopify store is not open yet); VeraClean automation is not built yet. ' +\n      'If asked about something not in these facts or in RECENT JARVIS ACTIVITY, say you do not know yet rather than guessing.',\n      'Turn the owner message into a work order. Reply with JSON only, with keys:',\n      'department, task_type, priority (low|normal|high), summary,',\n      'steps (array of max 5 short strings, each naming the agent role that does it),',\n      'needs_owner_approval (true if it launches products, spends money, contacts new people, signs anything),',\n      'approval_reason (string or null), data_needed (array of sources/data that must be fetched; never invent data).'\n    ].join(' ')\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "v5m1",
+      "name": "Read memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        250
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "limit": 3,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "v5m2",
+      "name": "Add memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        250
+      ],
+      "parameters": {
+        "jsCode": "// Gives JARVIS a shared memory: the latest entries from the n8n data table \"jarvis_memory\"\n// (written by other JARVIS workflows, e.g. the Monday research report). Works with an empty table.\nconst task = $('Owner request (Telegram)').first().json;\nconst rows = $input.all().map(i => i.json || {}).filter(r => r.summary);\nconst mem = rows.slice(0, 3).map(r => `[${String(r.createdAt || '').slice(0, 16).replace('T', ' ')} UTC] ${r.kind || 'note'}: ${String(r.summary).slice(0, 900)}`).join('\\n');\nconst add = mem ? ' RECENT JARVIS ACTIVITY (memory, newest first; you may use and quote it):\\n' + mem\n                : ' RECENT JARVIS ACTIVITY: nothing recorded yet.';\nreturn [{ json: { ...task, instructions: task.instructions + add } }];\n"
       }
     },
     {
@@ -870,6 +908,28 @@
       ]
     },
     "Owner request (Telegram)": {
+      "main": [
+        [
+          {
+            "node": "Read memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read memory": {
+      "main": [
+        [
+          {
+            "node": "Add memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add memory": {
       "main": [
         [
           {

@@ -54,6 +54,9 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [x] **Sample requests live 2026-11-09** (real CJ lookup by SKU + variant + shipping to Canada + approval; Decline path confirmed end to end): `jarvis-telegram-v5.json`. Reply "sample" (qty 1-3) to a research product photo -> CJ product/variant + real shipping to Canada -> approval buttons -> on approval, exact CJ ordering steps (no automatic purchase until CJ ordering is connected and tested). Offline-tested
 
+- [x] Scheduled Monday 10:00 research + voice message ran on its own 2026-11-09
+- [~] **Shared memory + self-knowledge (2026-11-09):** the screen claimed it was not connected to Telegram. Now every request includes true FACTS about JARVIS, and screen/Telegram read the n8n data table `jarvis_memory` (kind, summary; owner creates it) where research writes a summary after each report
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
