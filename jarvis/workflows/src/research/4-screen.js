@@ -1,7 +1,7 @@
 // Screen CJ search results (no AI): excluded categories, price band, de-duplicate, then rank by demand.
 // Demand = how many stores already list the product on CJ (CJ returns results sorted by it), plus
 // CJ's sales/order count when the API provides one. Keeps the best 8.
-const EXCLUDE = /(electr|usb|batter|charg|bluetooth|earphone|headphone|speaker|camera|phone|smart ?watch|\bled\b|lamp|cosmetic|make ?up|lipstick|mascara|skin ?care|serum|cream|perfume|nail polish|hair dye|toy|\bkid|child|baby|infant|toddler|food|snack|supplement|vitamin|medical|medicine|knife set|weapon|vape|e-cig|cbd|lithium)/i;
+const EXCLUDE = /(spot ?light|flash ?light|\blights?\b|rechargeable|solar|glow|electr|usb|batter|charg|bluetooth|earphone|headphone|speaker|camera|phone|smart ?watch|\bled\b|lamp|cosmetic|make ?up|lipstick|mascara|skin ?care|serum|cream|perfume|nail polish|hair dye|toy|\bkid|child|baby|infant|toddler|food|snack|supplement|vitamin|medical|medicine|knife set|weapon|vape|e-cig|cbd|lithium)/i;
 const MAX_COST_USD = 20;   // supplier price ceiling, before shipping
 const searches = $('Searches').all().map(i => i.json);
 const out = [], seen = new Set(), notes = [];

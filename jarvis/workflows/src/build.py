@@ -116,7 +116,11 @@ def chain_workflow(wf_name, file_name, router_file, order, labels, auth, readme,
             c[src] = {"main": [[{"node": dst, "type": "main", "index": 0}]]}
     if extra is not None:
         n += extra[0]
-        c.update(extra[1])
+        for src, v in extra[1].items():          # merge outputs (do not overwrite existing links)
+            outs = c.setdefault(src, {"main": []})["main"]
+            for i, targets in enumerate(v["main"]):
+                while len(outs) <= i: outs.append([])
+                outs[i] += [t for t in targets if t not in outs[i]]
     wf = {"name": wf_name, "nodes": n, "connections": c,
           "settings": {"executionOrder": "v1", "saveManualExecutions": True}, "pinData": {}}
     (here.parent / file_name).write_text(json.dumps(wf, indent=2) + "\n")
@@ -437,7 +441,23 @@ lnk(sc, "Product OK?", "CJ shipping to Canada", 0); lnk(sc, "Product OK?", "Samp
 lnk(sc, "CJ shipping to Canada", "Sample plan"); lnk(sc, "Sample plan", "Plan OK?")
 lnk(sc, "Plan OK?", "Ask owner: approve sample?", 0); lnk(sc, "Plan OK?", "Sample result", 1)
 lnk(sc, "Ask owner: approve sample?", "Sample result"); lnk(sc, "Sample result", "Reply: sample")
+sn += [
+  node("s15", "Memory: sample", "n8n-nodes-base.code", 2, [2980, Y + 200], {"jsCode": code("memory-from-reply.js").replace("__KIND__", "sample")}),
+  node("s16", "Save sample to memory", "n8n-nodes-base.dataTable", 1.1, [3200, Y + 200], {
+       "resource": "row", "operation": "insert", "dataTableId": {"__rl": True, "mode": "name", "value": "jarvis_memory"},
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+]
+lnk(sc, "Sample result", "Memory: sample"); lnk(sc, "Memory: sample", "Save sample to memory")
 v5_front_conns.pop("Owner request (Telegram)", None)
+sn += [
+  node("a15", "Memory: approval", "n8n-nodes-base.code", 2, [2650, -250], {"jsCode": code("memory-from-reply.js").replace("__KIND__", "approval")}),
+  node("a16", "Save approval to memory", "n8n-nodes-base.dataTable", 1.1, [2870, -250], {
+       "resource": "row", "operation": "insert", "dataTableId": {"__rl": True, "mode": "name", "value": "jarvis_memory"},
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+]
+lnk(sc, "Record decision", "Memory: approval"); lnk(sc, "Memory: approval", "Save approval to memory")
 v5_front_nodes += memory_nodes("v5", "Owner request (Telegram)", [200, 250])
 lnk(v5_front_conns, "Owner request (Telegram)", "Read memory"); lnk(v5_front_conns, "Read memory", "Add memory")
 chain_workflow("JARVIS Telegram v5 (approvals + samples)", "jarvis-telegram-v5.json", "omniroute-router.js",
