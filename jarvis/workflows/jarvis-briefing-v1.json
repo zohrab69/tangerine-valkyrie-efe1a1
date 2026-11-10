@@ -1,0 +1,344 @@
+{
+  "name": "JARVIS Briefing v1 (morning)",
+  "nodes": [
+    {
+      "id": "b0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -260
+      ],
+      "parameters": {
+        "width": 1250,
+        "height": 190,
+        "content": "## JARVIS Briefing v1 - every morning at 6:00 (Toronto) on Telegram\nReads JARVIS memory (reports, approvals waiting, decisions, problems), the free AI phrases it (facts only), then sends a short text and a voice message. To change the time: open *Every day 6:00* and edit the hour.\nCredentials: **OmniRoute** in *AI wording*; **JARVIS Telegram** in *Send briefing* and *Send voice*. Save, then Publish. Settings -> Error workflow -> JARVIS Alerts v1."
+      }
+    },
+    {
+      "id": "b1",
+      "name": "Every day 6:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2",
+      "name": "Send briefing now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b3",
+      "name": "Read memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        90
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "limit": 30,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b4",
+      "name": "Briefing facts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        90
+      ],
+      "parameters": {
+        "jsCode": "// Morning briefing: collect true facts from JARVIS memory (no guessing), then ask the free AI to phrase them.\nconst TZ = 'America/Toronto';\nconst rows = $input.all().map(i => i.json || {}).filter(r => r.summary && r.createdAt)\n  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));\nconst now = new Date();\nconst local = d => new Date(d).toLocaleString('en-CA', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });\nconst hoursAgo = d => (now - new Date(d)) / 3600e3;\nconst later = (r, kind) => rows.some(x => x.kind === kind && new Date(x.createdAt) > new Date(r.createdAt));\nconst lastResearch = rows.find(r => r.kind === 'research');\nconst waiting = rows.filter(r => (r.kind === 'approval_pending' && !later(r, 'approval')) || (r.kind === 'sample_pending' && !later(r, 'sample')))\n  .filter(r => hoursAgo(r.createdAt) < 48);\nconst decided = rows.filter(r => (r.kind === 'approval' || r.kind === 'sample') && hoursAgo(r.createdAt) < 24);\nconst errors = rows.filter(r => r.kind === 'error' && hoursAgo(r.createdAt) < 24);\nconst dow = now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long' });\nconst today = now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long', month: 'long', day: 'numeric' });\nconst facts = {\n  today,\n  latest_research: lastResearch ? { when: local(lastResearch.createdAt), summary: lastResearch.summary.slice(0, 900) } : null,\n  next_research: dow === 'Monday' ? 'today at 10:00' : 'next Monday at 10:00',\n  waiting_for_owner: waiting.map(r => r.summary.slice(0, 300)),\n  decisions_last_24h: decided.map(r => r.summary.slice(0, 300)),\n  problems_last_24h: errors.map(r => r.summary.slice(0, 300)),\n  stage: 'Shopify store not open yet; product research and sample testing. Next step: pick a healthy (green) product with good profit and fast delivery, reply \"sample\" to its photo, then set up Shopify.',\n};\nconst instructions = 'You are JARVIS, the AI chief operating officer of Zohrab\\'s businesses. Write his MORNING BRIEFING from the FACTS only. ' +\n  'Never invent numbers, products, meetings, sales or events; if something is empty, say there is nothing to report on it. ' +\n  'Reply with JSON only: {\"text\": \"...\", \"spoken\": \"...\"}. ' +\n  'text: for Telegram, max 120 words, plain text, short lines starting with an emoji (\u2600\ufe0f greeting with the date, \ud83d\udce6 research, \u23f3 waiting for you, \u2705 decisions, \u26a0\ufe0f problems only if any, \ud83d\udc49 one suggested next step). ' +\n  'spoken: the same in 2-4 natural spoken sentences, max 70 words, starting \"Good morning, Zohrab.\"';\nreturn [{ json: { facts, ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },\n  messages: [{ role: 'system', content: instructions }, { role: 'user', content: 'FACTS: ' + JSON.stringify(facts) }] } } }];\n"
+      }
+    },
+    {
+      "id": "b5",
+      "name": "AI wording (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        90
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://omniroute:20128/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "b6",
+      "name": "Briefing text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        90
+      ],
+      "parameters": {
+        "jsCode": "// Use the AI wording when available; otherwise a plain briefing from the same facts (never silent).\nconst f = $('Briefing facts').first().json.facts;\nlet text = '', spoken = '';\ntry {\n  const r = $input.first().json || {};\n  const c = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '');\n  const o = JSON.parse(c); text = String(o.text || ''); spoken = String(o.spoken || '');\n} catch (e) { /* fallback below */ }\nif (!text) {\n  text = [`\u2600\ufe0f Good morning Zohrab, ${f.today}.`,\n    f.latest_research ? `\ud83d\udce6 Last product research: ${f.latest_research.when}; next one ${f.next_research}.` : `\ud83d\udce6 No product research yet; next one ${f.next_research}.`,\n    `\u23f3 Waiting for you: ${f.waiting_for_owner.length ? f.waiting_for_owner.length + ' item(s) on Telegram' : 'nothing'}.`,\n    `\u2705 Decisions in the last 24 h: ${f.decisions_last_24h.length || 'none'}.`,\n    ...(f.problems_last_24h.length ? [`\u26a0\ufe0f Problems in the last 24 h: ${f.problems_last_24h.length}.`] : []),\n    '\ud83d\udc49 Next step: pick a \ud83d\udfe2 product with good profit and reply \"sample\" to its photo.'].join('\\n');\n}\nif (!spoken) spoken = `Good morning, Zohrab. Today is ${f.today}. ` + (f.waiting_for_owner.length ? `${f.waiting_for_owner.length} item is waiting for your approval on Telegram. ` : 'Nothing is waiting for your approval. ') + `The next product research is ${f.next_research}.`;\ntext = text.slice(0, 3500);\nreturn [{ json: { text, tts_body: { text: spoken.slice(0, 1200), lang: 'en', format: 'mp3' },\n  kind: 'briefing', summary: ('Morning briefing sent to Telegram: ' + text.replace(/\\s+/g, ' ')).slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "b7",
+      "name": "Send briefing",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      }
+    },
+    {
+      "id": "b8",
+      "name": "JARVIS voice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://jarvis-tts:5000/speak",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Briefing text').first().json.tts_body) }}",
+        "options": {
+          "timeout": 90000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "b9",
+      "name": "Send voice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        -60
+      ],
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "6203634137",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "fileName": "JARVIS-briefing.mp3",
+          "title": "Morning briefing",
+          "performer": "JARVIS"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b10",
+      "name": "Memory row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: j.summary } }];"
+      }
+    },
+    {
+      "id": "b11",
+      "name": "Save to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every day 6:00": {
+      "main": [
+        [
+          {
+            "node": "Read memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send briefing now": {
+      "main": [
+        [
+          {
+            "node": "Read memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read memory": {
+      "main": [
+        [
+          {
+            "node": "Briefing facts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Briefing facts": {
+      "main": [
+        [
+          {
+            "node": "AI wording (free)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI wording (free)": {
+      "main": [
+        [
+          {
+            "node": "Briefing text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Briefing text": {
+      "main": [
+        [
+          {
+            "node": "Send briefing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Memory row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory row": {
+      "main": [
+        [
+          {
+            "node": "Save to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send briefing": {
+      "main": [
+        [
+          {
+            "node": "JARVIS voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JARVIS voice": {
+      "main": [
+        [
+          {
+            "node": "Send voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

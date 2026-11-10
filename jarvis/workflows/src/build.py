@@ -597,3 +597,50 @@ lnk(ac, "Health memory row", "Save health to memory")
 (here.parent / "jarvis-alerts-v1.json").write_text(json.dumps({"name": "JARVIS Alerts v1 (errors + health)", "nodes": al, "connections": ac,
   "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
 print("wrote jarvis-alerts-v1.json")
+
+# ---------------------------------------------------------------------------
+# Briefing v1: daily 8:00 morning briefing on Telegram (text + voice), from memory facts only.
+def bcode(f): return (here / "briefing" / f).read_text()
+bn = [
+  node("b0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -260], {"width": 1250, "height": 190, "content":
+      "## JARVIS Briefing v1 - every morning at 6:00 (Toronto) on Telegram\n"
+      "Reads JARVIS memory (reports, approvals waiting, decisions, problems), the free AI phrases it (facts only), then sends a short text and a voice message. "
+      "To change the time: open *Every day 6:00* and edit the hour.\n"
+      "Credentials: **OmniRoute** in *AI wording*; **JARVIS Telegram** in *Send briefing* and *Send voice*. Save, then Publish. Settings -> Error workflow -> JARVIS Alerts v1."}),
+  node("b1", "Every day 6:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0], {"rule": {"interval": [{"field": "cronExpression", "expression": "0 6 * * *"}]}}),
+  node("b2", "Send briefing now", "n8n-nodes-base.manualTrigger", 1, [0, 180], {}),
+  node("b3", "Read memory", "n8n-nodes-base.dataTable", 1.1, [220, 90], {
+       "resource": "row", "operation": "get", "dataTableId": MEMORY_TABLE,
+       "limit": 30, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+       alwaysOutputData=True, onError="continueRegularOutput"),
+  node("b4", "Briefing facts", "n8n-nodes-base.code", 2, [440, 90], {"jsCode": bcode("1-facts.js")}),
+  node("b5", "AI wording (free)", "n8n-nodes-base.httpRequest", 4.2, [660, 90], {
+       "method": "POST", "url": "http://omniroute:20128/v1/chat/completions",
+       "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+       "options": {"timeout": 90000}}, onError="continueRegularOutput", alwaysOutputData=True),
+  node("b6", "Briefing text", "n8n-nodes-base.code", 2, [880, 90], {"jsCode": bcode("2-text.js")}),
+  node("b7", "Send briefing", "n8n-nodes-base.telegram", 1.2, [1100, 0], {
+       "chatId": OWNER_CHAT_ID, "text": "={{ $json.text }}", "additionalFields": {"appendAttribution": False}}),
+  node("b8", "JARVIS voice", "n8n-nodes-base.httpRequest", 4.2, [1320, 0], {
+       "method": "POST", "url": "http://jarvis-tts:5000/speak", "sendBody": True, "specifyBody": "json",
+       "jsonBody": "={{ JSON.stringify($('Briefing text').first().json.tts_body) }}",
+       "options": {"timeout": 90000, "response": {"response": {"responseFormat": "file", "outputPropertyName": "data"}}}},
+       onError="continueErrorOutput"),
+  node("b9", "Send voice", "n8n-nodes-base.telegram", 1.2, [1540, -60], {
+       "operation": "sendAudio", "chatId": OWNER_CHAT_ID, "binaryData": True, "binaryPropertyName": "data",
+       "additionalFields": {"fileName": "JARVIS-briefing.mp3", "title": "Morning briefing", "performer": "JARVIS"}}, onError="continueRegularOutput"),
+  node("b10", "Memory row", "n8n-nodes-base.code", 2, [1100, 200], {"jsCode": "const j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: j.summary } }];"}),
+  node("b11", "Save to memory", "n8n-nodes-base.dataTable", 1.1, [1320, 200], {
+       "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+]
+bc = {}
+for t in ("Every day 6:00", "Send briefing now"): lnk(bc, t, "Read memory")
+lnk(bc, "Read memory", "Briefing facts"); lnk(bc, "Briefing facts", "AI wording (free)"); lnk(bc, "AI wording (free)", "Briefing text")
+lnk(bc, "Briefing text", "Send briefing"); lnk(bc, "Briefing text", "Memory row"); lnk(bc, "Memory row", "Save to memory")
+lnk(bc, "Send briefing", "JARVIS voice"); lnk(bc, "JARVIS voice", "Send voice", 0)
+(here.parent / "jarvis-briefing-v1.json").write_text(json.dumps({"name": "JARVIS Briefing v1 (morning)", "nodes": bn, "connections": bc,
+  "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
+print("wrote jarvis-briefing-v1.json")
