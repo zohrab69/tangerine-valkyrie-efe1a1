@@ -1,0 +1,499 @@
+{
+  "name": "JARVIS Alerts v1 (errors + health)",
+  "nodes": [
+    {
+      "id": "x0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -300
+      ],
+      "parameters": {
+        "width": 1300,
+        "height": 210,
+        "content": "## JARVIS Alerts v1 - tells you on Telegram when something breaks\n**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v1*). Same problem repeated within 60 min = one alert.\n**Bottom:** every day 9:07 and Monday 10:40 (Toronto): checks the free AI, the voice service and that the Monday report went out. Silent when all is fine.\nCredentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."
+      }
+    },
+    {
+      "id": "x1",
+      "name": "When a workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "x2",
+      "name": "Format error alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// A JARVIS workflow failed (n8n Error Trigger). Build a short Telegram alert; skip repeats of the\n// same problem within 60 minutes so one broken step cannot flood the owner's phone.\nconst j = $input.first().json || {};\nconst ex = j.execution || {}, wf = j.workflow || {}, er = ex.error || {};\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst wfName = wf.name || 'a workflow';\nconst step = ex.lastNodeExecuted || (er.node && er.node.name) || 'unknown step';\nconst msg = String(er.message || er.description || 'no error message').replace(/\\s+/g, ' ').slice(0, 300);\nconst store = $getWorkflowStaticData('global');\nstore.recent = store.recent || {};\nconst key = wfName + '|' + step + '|' + msg.slice(0, 80);\nconst now = Date.now();\nfor (const k of Object.keys(store.recent)) if (now - store.recent[k] > 3600e3) delete store.recent[k];\nconst repeat = !!store.recent[key];\nstore.recent[key] = now;\nconst local = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst text = [\n  '\u26a0\ufe0f <b>JARVIS: something failed</b>',\n  'Workflow: <b>' + esc(wfName) + '</b>',\n  'Step: ' + esc(step),\n  'Problem: ' + esc(msg),\n  'When: ' + esc(local) + (ex.mode ? ' (' + esc(ex.mode) + ' run)' : ''),\n  ex.url ? 'Details: ' + esc(ex.url) : '',\n  'Nothing else was changed. Send me (Claude) a photo of this message and I will fix it.',\n].filter(Boolean).join('\\n');\nreturn [{ json: { send: !repeat, text, kind: 'error', summary: `Error in workflow \"${wfName}\" at step \"${step}\" (${local}): ${msg}` } }];\n"
+      }
+    },
+    {
+      "id": "x3",
+      "name": "New problem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "x3c",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "x4",
+      "name": "Send error alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        -80
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "x5",
+      "name": "Error memory row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Only the two memory columns (the data table has kind + summary).\nconst j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: String(j.summary).slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "x6",
+      "name": "Save error to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "h1",
+      "name": "Every day 9:07 + Monday 10:40",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "7 9 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "40 10 * * 1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "h0",
+      "name": "Run health check now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        580
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "h2",
+      "name": "Check AI (free combo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://omniroute:20128/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'jarvis-free', max_tokens: 5, messages: [{ role: 'user', content: 'Reply with OK' }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "h3",
+      "name": "Check voice service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        480
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://jarvis-tts:5000/health",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "h4",
+      "name": "Read memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        480
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "limit": 20,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "h5",
+      "name": "Evaluate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        480
+      ],
+      "parameters": {
+        "jsCode": "// Daily health check (and Monday 10:40 check that the weekly research report went out).\n// Silent when everything is fine; one Telegram alert listing the problems otherwise.\nconst problems = [];\nconst ai = $('Check AI (free combo)').first().json || {};\nconst aiText = ai.choices && ai.choices[0] && ai.choices[0].message && ai.choices[0].message.content;\nif (ai.error || !aiText) problems.push('Free AI (OmniRoute) did not answer' + (ai.error ? ': ' + String(ai.error.message || ai.error).slice(0, 150) : ''));\nconst tts = $('Check voice service').first().json || {};\nif (tts.error || tts.status !== 'ok') problems.push('Voice service (Kokoro/Piper) did not answer');\nconst rows = $('Read memory').all().map(i => i.json || {});\nconst tz = 'America/Toronto';\nconst nowT = new Date();\nconst dow = nowT.toLocaleDateString('en-CA', { timeZone: tz, weekday: 'short' });\nconst hour = Number(nowT.toLocaleString('en-CA', { timeZone: tz, hour: '2-digit', hour12: false })) % 24;\nif (dow === 'Mon' && hour >= 10) {\n  const day = d => new Date(d).toLocaleDateString('en-CA', { timeZone: tz });\n  const sentRecently = rows.some(r => r.kind === 'research' && r.createdAt && day(r.createdAt) === day(nowT));\n  if (!sentRecently) problems.push('The Monday 10:00 product research report was not sent (is \"JARVIS Research v1\" published?)');\n}\nconst local = nowT.toLocaleString('en-CA', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' });\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst text = '\u26a0\ufe0f <b>JARVIS health check</b> (' + esc(local) + ')\\n' + problems.map(p => '\u2022 ' + esc(p)).join('\\n') +\n  '\\nSend me (Claude) a photo of this message and I will fix it.';\nreturn [{ json: { send: problems.length > 0, text, kind: 'error', summary: 'Health check problems (' + local + '): ' + problems.join('; ') } }];\n",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "h6",
+      "name": "Any problem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "h6c",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h7",
+      "name": "Send health alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1340,
+        400
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "h8",
+      "name": "Health memory row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        580
+      ],
+      "parameters": {
+        "jsCode": "// Only the two memory columns (the data table has kind + summary).\nconst j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: String(j.summary).slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "h9",
+      "name": "Save health to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        580
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "When a workflow fails": {
+      "main": [
+        [
+          {
+            "node": "Format error alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format error alert": {
+      "main": [
+        [
+          {
+            "node": "New problem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New problem?": {
+      "main": [
+        [
+          {
+            "node": "Send error alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error memory row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error memory row": {
+      "main": [
+        [
+          {
+            "node": "Save error to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day 9:07 + Monday 10:40": {
+      "main": [
+        [
+          {
+            "node": "Check AI (free combo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run health check now": {
+      "main": [
+        [
+          {
+            "node": "Check AI (free combo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check AI (free combo)": {
+      "main": [
+        [
+          {
+            "node": "Check voice service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check voice service": {
+      "main": [
+        [
+          {
+            "node": "Read memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read memory": {
+      "main": [
+        [
+          {
+            "node": "Evaluate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate": {
+      "main": [
+        [
+          {
+            "node": "Any problem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any problem?": {
+      "main": [
+        [
+          {
+            "node": "Send health alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Health memory row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health memory row": {
+      "main": [
+        [
+          {
+            "node": "Save health to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

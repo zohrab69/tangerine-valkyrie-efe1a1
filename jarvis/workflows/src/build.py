@@ -537,3 +537,63 @@ lnk(ec, "Webhook (screen events)", "Read memory"); lnk(ec, "Read memory", "Forma
 (here.parent / "jarvis-events-v1.json").write_text(json.dumps({"name": "JARVIS Events v1 (screen notifications)", "nodes": ev, "connections": ec,
   "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": True}, "pinData": {}}, indent=2) + "\n")
 print("wrote jarvis-events-v1.json")
+
+# ---------------------------------------------------------------------------
+# Alerts v1: error alerts (n8n Error Trigger) + daily health check + Monday report check.
+def acode(f): return (here / "alerts" / f).read_text()
+def send_alert(id_, name, pos):
+    return node(id_, name, "n8n-nodes-base.telegram", 1.2, pos, {
+        "chatId": OWNER_CHAT_ID, "text": "={{ $json.text }}",
+        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML", "disable_web_page_preview": True}},
+        onError="continueRegularOutput")
+al = [
+  node("x0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -300], {"width": 1300, "height": 210, "content":
+      "## JARVIS Alerts v1 - tells you on Telegram when something breaks\n"
+      "**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v1*). Same problem repeated within 60 min = one alert.\n"
+      "**Bottom:** every day 9:07 and Monday 10:40 (Toronto): checks the free AI, the voice service and that the Monday report went out. Silent when all is fine.\n"
+      "Credentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."}),
+  node("x1", "When a workflow fails", "n8n-nodes-base.errorTrigger", 1, [0, 0], {}),
+  node("x2", "Format error alert", "n8n-nodes-base.code", 2, [220, 0], {"jsCode": acode("1-format-error.js")}),
+  ifnode("x3", "New problem?", [440, 0], "={{ $json.send === true }}"),
+  send_alert("x4", "Send error alert", [680, -80]),
+  node("x5", "Error memory row", "n8n-nodes-base.code", 2, [680, 100], {"jsCode": acode("3-memory-row.js")}),
+  node("x6", "Save error to memory", "n8n-nodes-base.dataTable", 1.1, [900, 100], {
+       "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+  node("h1", "Every day 9:07 + Monday 10:40", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 400], {"rule": {"interval": [
+       {"field": "cronExpression", "expression": "7 9 * * *"}, {"field": "cronExpression", "expression": "40 10 * * 1"}]}}),
+  node("h0", "Run health check now", "n8n-nodes-base.manualTrigger", 1, [0, 580], {}),
+  node("h2", "Check AI (free combo)", "n8n-nodes-base.httpRequest", 4.2, [240, 480], {
+       "method": "POST", "url": "http://omniroute:20128/v1/chat/completions",
+       "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+       "sendBody": True, "specifyBody": "json",
+       "jsonBody": "={{ JSON.stringify({ model: 'jarvis-free', max_tokens: 5, messages: [{ role: 'user', content: 'Reply with OK' }] }) }}",
+       "options": {"timeout": 60000}}, onError="continueRegularOutput", alwaysOutputData=True),
+  node("h3", "Check voice service", "n8n-nodes-base.httpRequest", 4.2, [460, 480], {
+       "method": "GET", "url": "http://jarvis-tts:5000/health", "options": {"timeout": 15000}},
+       onError="continueRegularOutput", alwaysOutputData=True),
+  node("h4", "Read memory", "n8n-nodes-base.dataTable", 1.1, [680, 480], {
+       "resource": "row", "operation": "get", "dataTableId": MEMORY_TABLE,
+       "limit": 20, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+       alwaysOutputData=True, onError="continueRegularOutput"),
+  node("h5", "Evaluate", "n8n-nodes-base.code", 2, [900, 480], {"jsCode": acode("2-health.js"), "mode": "runOnceForAllItems"}),
+  ifnode("h6", "Any problem?", [1120, 480], "={{ $json.send === true }}"),
+  send_alert("h7", "Send health alert", [1340, 400]),
+  node("h8", "Health memory row", "n8n-nodes-base.code", 2, [1340, 580], {"jsCode": acode("3-memory-row.js")}),
+  node("h9", "Save health to memory", "n8n-nodes-base.dataTable", 1.1, [1560, 580], {
+       "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+]
+ac = {}
+lnk(ac, "When a workflow fails", "Format error alert"); lnk(ac, "Format error alert", "New problem?")
+lnk(ac, "New problem?", "Send error alert", 0); lnk(ac, "New problem?", "Error memory row", 0)
+lnk(ac, "Error memory row", "Save error to memory")
+for t in ("Every day 9:07 + Monday 10:40", "Run health check now"): lnk(ac, t, "Check AI (free combo)")
+lnk(ac, "Check AI (free combo)", "Check voice service"); lnk(ac, "Check voice service", "Read memory"); lnk(ac, "Read memory", "Evaluate")
+lnk(ac, "Evaluate", "Any problem?"); lnk(ac, "Any problem?", "Send health alert", 0); lnk(ac, "Any problem?", "Health memory row", 0)
+lnk(ac, "Health memory row", "Save health to memory")
+(here.parent / "jarvis-alerts-v1.json").write_text(json.dumps({"name": "JARVIS Alerts v1 (errors + health)", "nodes": al, "connections": ac,
+  "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
+print("wrote jarvis-alerts-v1.json")
