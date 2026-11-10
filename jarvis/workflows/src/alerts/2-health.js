@@ -2,8 +2,9 @@
 // Silent when everything is fine; one Telegram alert listing the problems otherwise.
 const problems = [];
 const ai = $('Check AI (free combo)').first().json || {};
-const aiText = ai.choices && ai.choices[0] && ai.choices[0].message && ai.choices[0].message.content;
-if (ai.error || !aiText) problems.push('Free AI (OmniRoute) did not answer' + (ai.error ? ': ' + String(ai.error.message || ai.error).slice(0, 150) : ''));
+// A reply with at least one choice counts as working (reasoning models can return empty text for tiny limits).
+const aiOk = !ai.error && Array.isArray(ai.choices) && ai.choices.length > 0;
+if (!aiOk) problems.push('Free AI (OmniRoute) did not answer' + (ai.error ? ': ' + String(ai.error.message || ai.error).slice(0, 150) : ''));
 const tts = $('Check voice service').first().json || {};
 if (tts.error || tts.status !== 'ok') problems.push('Voice service (Kokoro/Piper) did not answer');
 const rows = $('Read memory').all().map(i => i.json || {});

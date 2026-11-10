@@ -568,7 +568,7 @@ al = [
        "method": "POST", "url": "http://omniroute:20128/v1/chat/completions",
        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
        "sendBody": True, "specifyBody": "json",
-       "jsonBody": "={{ JSON.stringify({ model: 'jarvis-free', max_tokens: 5, messages: [{ role: 'user', content: 'Reply with OK' }] }) }}",
+       "jsonBody": "={{ JSON.stringify({ model: 'jarvis-free', max_tokens: 60, messages: [{ role: 'user', content: 'Reply with OK' }] }) }}",
        "options": {"timeout": 60000}}, onError="continueRegularOutput", alwaysOutputData=True),
   node("h3", "Check voice service", "n8n-nodes-base.httpRequest", 4.2, [460, 480], {
        "method": "GET", "url": "http://jarvis-tts:5000/health", "options": {"timeout": 15000}},
