@@ -16,7 +16,7 @@ const today = now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long', m
 const facts = {
   today,
   latest_research: lastResearch ? { when: local(lastResearch.createdAt), summary: lastResearch.summary.slice(0, 900) } : null,
-  next_research: dow === 'Monday' ? 'today at 10:00' : 'next Monday at 10:00',
+  next_research: (dow === 'Monday' && Number(now.toLocaleString('en-CA', { timeZone: TZ, hour: '2-digit', hour12: false })) % 24 < 10) ? 'today at 10:00' : 'next Monday at 10:00',
   waiting_for_owner: waiting.map(r => r.summary.slice(0, 300)),
   decisions_last_24h: decided.map(r => r.summary.slice(0, 300)),
   problems_last_24h: errors.map(r => r.summary.slice(0, 300)),
