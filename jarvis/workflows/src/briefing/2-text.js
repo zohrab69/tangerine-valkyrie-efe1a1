@@ -4,9 +4,10 @@ let text = '', spoken = '';
 try {
   const r = $input.first().json || {};
   const raw = String(r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '');
-  const m = raw.match(/\{[\s\S]*\}/);                  // tolerate extra words or code fences around the JSON
-  if (m) { const o = JSON.parse(m[0]); text = String(o.text || ''); spoken = String(o.spoken || ''); }
-  else if (raw.trim().length > 40) { text = raw.trim(); }   // plain text answer: use it as the message
+  const clean = raw.replace(/```[a-z]*\n?|```/g, '').trim();
+  const parts = clean.split(/^\s*=+\s*SPOKEN\s*=+\s*$/mi);
+  if (parts.length >= 2) { text = parts[0].trim(); spoken = parts.slice(1).join(' ').trim(); }
+  else if (clean.length > 40) { text = clean; }            // no separator: use it all as the message
 } catch (e) { /* fallback below */ }
 if (!text) {
   text = [`☀️ Good morning Zohrab, ${f.today}.`,
