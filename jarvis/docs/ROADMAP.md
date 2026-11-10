@@ -65,7 +65,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [~] Timings from the owner 2026-11-09: AI answer 1.1-2.2 s (fine); voice started 3.8-8.4 s after asking, so Kokoro on 2 vCPU is the bottleneck. The first spoken piece is now cut at a comma when long. Option: rescale the server to CX33 (4 vCPU) for roughly 2x faster voice
 
-- [~] **Competition check (2026-11-10):** bands by CJ store count (<20 unproven, 20-1999 healthy, 2000-7999 crowded, 8000+ saturated) plus near-identical copies in the same searches; ranking prefers healthy; report shows 🟢🟠🔴⚪ per product. Signal is CJ-only (not Amazon/TikTok); offline-tested
+- [x] **Competition check live (2026-11-10, real run: pet bowl / home storage / closet organizer; e.g. rice sieve basin 🟢 675 stores, est. profit 9.16 CAD, 4-7 days):** bands by CJ store count (<20 unproven, 20-1999 healthy, 2000-7999 crowded, 8000+ saturated) plus near-identical copies in the same searches; ranking prefers healthy; report shows 🟢🟠🔴⚪ per product. Signal is CJ-only (not Amazon/TikTok); offline-tested
 
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
