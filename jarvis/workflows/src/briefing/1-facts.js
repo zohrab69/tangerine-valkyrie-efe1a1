@@ -27,5 +27,5 @@ const instructions = 'You are JARVIS, the AI chief operating officer of Zohrab\'
   'Reply with JSON only: {"text": "...", "spoken": "..."}. ' +
   'text: for Telegram, max 120 words, plain text, short lines starting with an emoji (☀️ greeting with the date, 📦 research, ⏳ waiting for you, ✅ decisions, ⚠️ problems only if any, 👉 one suggested next step). ' +
   'spoken: the same in 2-4 natural spoken sentences, max 70 words, starting "Good morning, Zohrab."';
-return [{ json: { facts, ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },
+return [{ json: { facts, ai_body: { model: 'jarvis-free', max_tokens: 1500, response_format: { type: 'json_object' },
   messages: [{ role: 'system', content: instructions }, { role: 'user', content: 'FACTS: ' + JSON.stringify(facts) }] } } }];

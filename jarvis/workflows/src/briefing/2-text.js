@@ -3,8 +3,10 @@ const f = $('Briefing facts').first().json.facts;
 let text = '', spoken = '';
 try {
   const r = $input.first().json || {};
-  const c = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '').replace(/^\s*```(?:json)?|```\s*$/g, '');
-  const o = JSON.parse(c); text = String(o.text || ''); spoken = String(o.spoken || '');
+  const raw = String(r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '');
+  const m = raw.match(/\{[\s\S]*\}/);                  // tolerate extra words or code fences around the JSON
+  if (m) { const o = JSON.parse(m[0]); text = String(o.text || ''); spoken = String(o.spoken || ''); }
+  else if (raw.trim().length > 40) { text = raw.trim(); }   // plain text answer: use it as the message
 } catch (e) { /* fallback below */ }
 if (!text) {
   text = [`☀️ Good morning Zohrab, ${f.today}.`,
