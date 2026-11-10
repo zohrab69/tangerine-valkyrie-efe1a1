@@ -357,7 +357,7 @@ def memory_nodes(prefix, src, pos):
     return [
       node(prefix + "m1", "Read memory", "n8n-nodes-base.dataTable", 1.1, [x, y], {
            "resource": "row", "operation": "get", "dataTableId": MEMORY_TABLE,
-           "limit": 3, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+           "limit": 6, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
            alwaysOutputData=True, onError="continueRegularOutput"),
       node(prefix + "m2", "Add memory", "n8n-nodes-base.code", 2, [x + 200, y], {"jsCode": code("memory-add.js").replace("__SRC__", src)}),
     ]
@@ -458,6 +458,19 @@ sn += [
        onError="continueRegularOutput"),
 ]
 lnk(sc, "Record decision", "Memory: approval"); lnk(sc, "Memory: approval", "Save approval to memory")
+def mem_save(id_, name, pos):
+    return node(id_, name, "n8n-nodes-base.dataTable", 1.1, pos, {
+       "resource": "row", "operation": "insert", "dataTableId": {"__rl": True, "mode": "name", "value": "jarvis_memory"},
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput")
+sn += [
+  node("a17", "Memory: approval pending", "n8n-nodes-base.code", 2, [2150, -450], {"jsCode": code("memory-from-reply.js").replace("__KIND__", "approval_pending")}),
+  mem_save("a18", "Save pending approval", [2370, -450]),
+  node("s17", "Memory: sample pending", "n8n-nodes-base.code", 2, [2520, Y - 440], {"jsCode": code("memory-from-reply.js").replace("__KIND__", "sample_pending")}),
+  mem_save("s18", "Save pending sample", [2740, Y - 440]),
+]
+lnk(sc, "Needs owner approval?", "Memory: approval pending", 0); lnk(sc, "Memory: approval pending", "Save pending approval")
+lnk(sc, "Plan OK?", "Memory: sample pending", 0); lnk(sc, "Memory: sample pending", "Save pending sample")
 v5_front_nodes += memory_nodes("v5", "Owner request (Telegram)", [200, 250])
 lnk(v5_front_conns, "Owner request (Telegram)", "Read memory"); lnk(v5_front_conns, "Read memory", "Add memory")
 chain_workflow("JARVIS Telegram v5 (approvals + samples)", "jarvis-telegram-v5.json", "omniroute-router.js",
@@ -500,3 +513,27 @@ for n in wfr["nodes"]:
         n["parameters"]["content"] += "\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
 wfr_path.write_text(json.dumps(wfr, indent=2) + "\n")
 print("wrote jarvis-voice-v1.json + research memory")
+
+# ---------------------------------------------------------------------------
+# Events v1: the screen polls /api/events (Caddy adds the screen key) for live notifications.
+ev = [
+  node("e0", "README", "n8n-nodes-base.stickyNote", 1, [-40, -220], {"width": 900, "height": 160, "content":
+       "## JARVIS Events v1 - live notifications for the JARVIS screen\n"
+       "The screen asks every ~20 s what JARVIS did recently (data table **jarvis_memory**) and announces new items: reports sent, samples, approvals waiting.\n"
+       "Setup: *Webhook* -> Header Auth credential **JARVIS screen key**. Save, then Publish."}),
+  node("e1", "Webhook (screen events)", "n8n-nodes-base.webhook", 2, [0, 0],
+       {"httpMethod": "GET", "path": "jarvis-events", "authentication": "headerAuth", "responseMode": "responseNode", "options": {}},
+       webhookId="703d7b1d-c46d-4fdd-b847-cc958501301e"),
+  node("e2", "Read memory", "n8n-nodes-base.dataTable", 1.1, [220, 0], {
+       "resource": "row", "operation": "get", "dataTableId": {"__rl": True, "mode": "name", "value": "jarvis_memory"},
+       "limit": 8, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+       alwaysOutputData=True, onError="continueRegularOutput"),
+  node("e3", "Format events", "n8n-nodes-base.code", 2, [440, 0], {"jsCode": code("events.js")}),
+  node("e4", "Answer the screen", "n8n-nodes-base.respondToWebhook", 1.1, [660, 0],
+       {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": {}}),
+]
+ec = {}
+lnk(ec, "Webhook (screen events)", "Read memory"); lnk(ec, "Read memory", "Format events"); lnk(ec, "Format events", "Answer the screen")
+(here.parent / "jarvis-events-v1.json").write_text(json.dumps({"name": "JARVIS Events v1 (screen notifications)", "nodes": ev, "connections": ec,
+  "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": True}, "pinData": {}}, indent=2) + "\n")
+print("wrote jarvis-events-v1.json")

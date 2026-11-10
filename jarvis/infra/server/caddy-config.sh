@@ -34,6 +34,13 @@ $JARVIS_HOST {
   handle /api/speak {
     reverse_proxy jarvis-tts:5000
   }
+  handle /api/events {
+    rewrite * /webhook/jarvis-events
+    reverse_proxy n8n:5678 {
+      header_up -Authorization
+      header_up X-Jarvis-Key $VOICE_SECRET
+    }
+  }
   handle /api/ask {
     rewrite * /webhook/jarvis-voice
     reverse_proxy n8n:5678 {

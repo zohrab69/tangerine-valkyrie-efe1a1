@@ -67,6 +67,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [x] **Competition check live (2026-11-10, real run: pet bowl / home storage / closet organizer; e.g. rice sieve basin 🟢 675 stores, est. profit 9.16 CAD, 4-7 days):** bands by CJ store count (<20 unproven, 20-1999 healthy, 2000-7999 crowded, 8000+ saturated) plus near-identical copies in the same searches; ranking prefers healthy; report shows 🟢🟠🔴⚪ per product. Signal is CJ-only (not Amazon/TikTok); offline-tested
 
+- [~] **Proactive JARVIS (owner asked 2026-11-10):** greeting or hands-free start gives a spoken briefing (latest Telegram activity in local time, decisions, next step, from memory + CURRENT STAGE facts); the screen polls /api/events (new workflow `jarvis-events-v1.json`, Caddy route) every 20 s and announces new Telegram activity; the approval panel shows items waiting (v5 writes approval_pending/sample_pending rows). Tested in Chromium with a mock server
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself

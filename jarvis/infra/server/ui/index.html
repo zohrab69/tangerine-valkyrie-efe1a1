@@ -434,8 +434,61 @@
     handsFree = true; $('hands').classList.add('on'); $('hands').textContent = 'Hands-free on';
     if (!startHandsFree()) { stopHandsFree(); return; }
     idleState();
-    speak(lang === 'fr' ? 'Mode mains libres activé. Dites JARVIS quand vous avez besoin de moi.' : "Hands-free mode on. Just say JARVIS when you need me.");
+    ask(lang === 'fr' ? 'Bonjour JARVIS, fais-moi le point.' : 'Hello JARVIS, brief me: where are we at?');
   };
+
+  // ---------- live notifications: what JARVIS just did elsewhere (Telegram, reports, approvals) ----------
+  // Polls /api/events every 20 s while the page is open. New items are shown in the conversation and,
+  // when JARVIS is free, announced out loud. Items that existed before the page was opened are not announced.
+  let lastEventAt = null, pollTimer = null;
+  const pendingBox = $('appr');
+  function eventSpeech(e) {
+    const fr = lang === 'fr';
+    switch (e.kind) {
+      case 'research': return fr ? "Zohrab, je viens d'envoyer la recherche de produits sur Telegram. Jetez-y un œil." : "Zohrab, I've just sent the new product research to your Telegram. Have a look when you can.";
+      case 'approval_pending': return fr ? "Zohrab, une demande attend votre approbation sur Telegram." : "Zohrab, a request is waiting for your approval on Telegram.";
+      case 'sample_pending': return fr ? "Zohrab, une demande d'échantillon attend votre approbation sur Telegram." : "Zohrab, a sample request is waiting for your approval on Telegram.";
+      case 'sample': return fr ? "Votre décision sur l'échantillon est enregistrée." : "Your sample decision is recorded.";
+      case 'approval': return fr ? "Votre décision est enregistrée." : "Your decision is recorded.";
+      default: return fr ? "J'ai une nouvelle mise à jour sur Telegram." : "I have a new update for you on Telegram.";
+    }
+  }
+  function renderPending(events) {
+    // waiting = pending items with no later decision of the same type
+    const later = (e, k) => events.some(x => x.kind === k && new Date(x.at) > new Date(e.at));
+    const waiting = events.filter(e => (e.kind === 'approval_pending' && !later(e, 'approval')) || (e.kind === 'sample_pending' && !later(e, 'sample')));
+    if (!waiting.length) {
+      if (!pendingBox.querySelector('.appr.live')) return;
+      pendingBox.querySelectorAll('.appr.live').forEach(x => x.remove());
+      if (!pendingBox.children.length) pendingBox.innerHTML = '<p class="empty">Nothing waiting. Approvals arrive on your Telegram with Approve / Decline buttons.</p>';
+      return;
+    }
+    const e0 = pendingBox.querySelector('.empty'); if (e0) e0.remove();
+    pendingBox.querySelectorAll('.appr.live').forEach(x => x.remove());
+    for (const w of waiting.slice(0, 4)) {
+      const div = document.createElement('div'); div.className = 'appr live';
+      div.innerHTML = '<div class="t">' + esc(w.summary.replace(/^[^:]*\):\s*/, '')) + '</div><div class="r">' + esc(w.local) + ' · tap Approve / Decline in Telegram</div>';
+      pendingBox.appendChild(div);
+    }
+  }
+  async function pollEvents() {
+    if (document.hidden) return;
+    try {
+      const r = await fetch('api/events', { cache: 'no-store' }); if (!r.ok) return;
+      const d = await r.json(); const events = Array.isArray(d.events) ? d.events : [];
+      renderPending(events);
+      const newestAt = events.length ? events[0].at : null;
+      if (lastEventAt === null) { lastEventAt = newestAt || ''; return; }        // first poll: remember, do not announce
+      const fresh = events.filter(e => e.at && (!lastEventAt || new Date(e.at) > new Date(lastEventAt))).reverse();
+      if (newestAt) lastEventAt = newestAt;
+      for (const e of fresh) {
+        addMsg('JARVIS', '🔔 ' + e.summary, '<div class="meta">' + esc(e.local) + ' · Telegram</div>');
+        if (!busy && !speaking && !listening) speak(eventSpeech(e));
+      }
+    } catch (e) { /* offline: try again next time */ }
+  }
+  pollEvents(); pollTimer = setInterval(pollEvents, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollEvents(); });
 
   // hold-to-talk: space bar, TALK button, or the core
   const typing = () => document.activeElement === $('text');

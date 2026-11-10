@@ -1,0 +1,132 @@
+{
+  "name": "JARVIS Events v1 (screen notifications)",
+  "nodes": [
+    {
+      "id": "e0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -220
+      ],
+      "parameters": {
+        "width": 900,
+        "height": 160,
+        "content": "## JARVIS Events v1 - live notifications for the JARVIS screen\nThe screen asks every ~20 s what JARVIS did recently (data table **jarvis_memory**) and announces new items: reports sent, samples, approvals waiting.\nSetup: *Webhook* -> Header Auth credential **JARVIS screen key**. Save, then Publish."
+      }
+    },
+    {
+      "id": "e1",
+      "name": "Webhook (screen events)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "jarvis-events",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "703d7b1d-c46d-4fdd-b847-cc958501301e"
+    },
+    {
+      "id": "e2",
+      "name": "Read memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "limit": 8,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e3",
+      "name": "Format events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Latest JARVIS activity for the screen (polled every ~20 s). Newest first, local time.\nconst TZ = 'America/Toronto';\nconst rows = $input.all().map(i => i.json || {}).filter(r => r.summary);\nconst events = rows.slice(0, 8).map(r => ({\n  id: r.id, kind: r.kind || 'note', summary: String(r.summary).slice(0, 600), at: r.createdAt,\n  local: r.createdAt ? new Date(r.createdAt).toLocaleString('en-CA', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }) : '',\n}));\nreturn [{ json: { events } }];\n"
+      }
+    },
+    {
+      "id": "e4",
+      "name": "Answer the screen",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook (screen events)": {
+      "main": [
+        [
+          {
+            "node": "Read memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read memory": {
+      "main": [
+        [
+          {
+            "node": "Format events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format events": {
+      "main": [
+        [
+          {
+            "node": "Answer the screen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}
