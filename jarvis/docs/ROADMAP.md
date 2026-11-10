@@ -69,7 +69,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [x] **Proactive JARVIS live, confirmed by owner 2026-11-10:** greeting or hands-free start gives a spoken briefing (latest Telegram activity in local time, decisions, next step, from memory + CURRENT STAGE facts); the screen polls /api/events (new workflow `jarvis-events-v1.json`, Caddy route) every 20 s and announces new Telegram activity; the approval panel shows items waiting (v5 writes approval_pending/sample_pending rows). Tested in Chromium with a mock server
 
-- [~] **Morning briefing (owner chose 6:00, 2026-11-10):** `jarvis-briefing-v1.json`: daily 6:00 Toronto, memory facts only -> free AI wording (plain fallback) -> Telegram text + JARVIS voice (Kokoro) -> memory row (screen announces it)
+- [x] **Morning briefing live 2026-11-10 (text + voice delivered; AI wording to confirm after credential check):** `jarvis-briefing-v1.json`: daily 6:00 Toronto, memory facts only -> free AI wording (plain fallback) -> Telegram text + JARVIS voice (Kokoro) -> memory row (screen announces it)
 
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
