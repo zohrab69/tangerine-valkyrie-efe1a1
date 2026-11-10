@@ -13,7 +13,7 @@ const lists = [
     { pid: 'P2', productNameEn: 'USB Rechargeable Milk Frother', categoryName: 'Kitchen', sellPrice: '6.5', listedNum: 2000 },
     { pid: 'P3', productNameEn: 'Baby Food Maker', categoryName: 'Kitchen', sellPrice: '9', listedNum: 500 },
     { pid: 'P4', productNameEn: 'Stainless Herb Scissors', categoryName: 'Kitchen Tools', productSku: 'CJ004', sellPrice: '2.40-3.10', listedNum: 3, productImage: '["https://x/b.jpg","https://x/c.jpg"]' } ] } },
-  { result: true, code: 200, data: { content: [ { productList: [ { id: 'P5', nameEn: 'Pet Grooming Glove', sku: 'CJ005', sellPrice: '1.90', listedNum: 1500 }, { id: 'P1', nameEn: 'dup', sellPrice: '3' } ] } ] } },
+  { result: true, code: 200, data: { content: [ { productList: [ { id: 'P5', nameEn: 'Pet Grooming Glove', sku: 'CJ005', sellPrice: '1.90', listedNum: 15130 }, { id: 'P1', nameEn: 'dup', sellPrice: '3' } ] } ] } },
   { result: false, code: 1600200, message: 'Too many requests' } ];
 N['Screen products'] = run('4-screen.js', lists.map(json => ({ json })), N, sd);
 console.log('screened', N['Screen products'].map(x => x.json.pid + ':' + x.json.listed_by_stores), N['Screen products'][0].json.screen_notes);
