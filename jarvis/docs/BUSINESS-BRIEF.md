@@ -30,7 +30,7 @@ Trading stays paused.
   cosmetics** in product research. **Starting budget: $200** (assumed CAD) for Shopify, domain and test orders.
   This is separate from the AI cap in `config/budget.json`.
 - **JARVIS voice (owner choice 2026-11-09):** Kokoro `am_adam` (American male), free and running on the server.
-- **Store name (owner choice 2026-11-11): Rangéo** (web address without accent: rangeo). Owner tests the whole flow with a real order to himself instead of a separate sample.
+- **Store name (owner choice 2026-11-11): Rangéo** (Shopify address: rangeo-ca.myshopify.com). Owner tests the whole flow with a real order to himself instead of a separate sample.
 - **Backbone:** keep **n8n**, which is free, already installed, and has the integrations needed. Use separate services only
   where n8n cannot do the job alone: phone calls, video rendering, social APIs.
 - **Cloud server now (owner decision 2026-11-06):** Hetzner CX23 (about €6/month), set up from `infra/server/`. The laptop is too short on RAM for OmniRoute.

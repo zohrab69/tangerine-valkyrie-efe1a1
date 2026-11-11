@@ -74,7 +74,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [~] **Owner targets in research (2026-11-11):** 10+ CAD estimated profit and delivery 10 days or less -> 🎯, listed first; misses explained per product; summary and voice say how many met the targets. Targets in research/6-finance.js (target_profit_cad, target_days)
 
 ## Phase 4: Shopify launch
-- [ ] Rangéo store (owner started 2026-11-11), in order: 1 Shopify account, 2 settings (CAD, FR+EN, shipping Canada), 3 Shopify Payments, 4 legal pages (Quebec), 5 CJ app + auto-payment, 6 import Vehicle Visor (FR+EN), 7 test order by the owner, 8 JARVIS order alerts
+- [ ] Rangéo store (owner started 2026-11-11; step 1 done: rangeo-ca.myshopify.com), in order: 1 Shopify account, 2 settings (CAD, FR+EN, shipping Canada), 3 Shopify Payments, 4 legal pages (Quebec), 5 CJ app + auto-payment, 6 import Vehicle Visor (FR+EN), 7 test order by the owner, 8 JARVIS order alerts
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
 - [ ] Listing publisher (draft → approval → publish, with idempotency key)
