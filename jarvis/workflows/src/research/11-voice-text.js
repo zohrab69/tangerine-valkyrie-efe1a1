@@ -7,11 +7,12 @@ const NAME = 'Zohrab';
 const greet = hNum < 12 ? 'Good morning' : hNum < 18 ? 'Good afternoon' : 'Good evening';
 let text;
 if (top.length) {
+  const hits = top.filter(p => p.meets_target).length;
   const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];
   const shortName = best.name.split(/[-,|]/)[0].trim().split(/\s+/).slice(0, 6).join(' ');
   text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +
          `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +
-         `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;
+         (hits ? `${hits} of them meet${hits === 1 ? 's' : ''} your targets. ` : 'None met both of your targets this week. ') + `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;
 } else {
   text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;
 }

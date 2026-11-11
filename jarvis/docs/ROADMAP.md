@@ -71,6 +71,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 - [x] **Morning briefing live 2026-11-10 (AI-written text + voice confirmed; JSON mode removed because Groq rejected emoji JSON):** `jarvis-briefing-v1.json`: daily 6:00 Toronto, memory facts only -> free AI wording (plain fallback) -> Telegram text + JARVIS voice (Kokoro) -> memory row (screen announces it)
 
+- [~] **Owner targets in research (2026-11-11):** 10+ CAD estimated profit and delivery 10 days or less -> 🎯, listed first; misses explained per product; summary and voice say how many met the targets. Targets in research/6-finance.js (target_profit_cad, target_days)
+
 ## Phase 4: Shopify launch
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself

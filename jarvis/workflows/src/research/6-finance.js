@@ -8,6 +8,9 @@ const F = {
   returns_pct: 0.05,         // allowance for refunds/returns
   marketing_pct: 0.20,       // allowance for ads/promotion per sale
   max_days: 20,              // longest acceptable delivery estimate to Canada
+  // Owner's TARGETS (2026-11-10): products meeting both are listed first and marked 🎯
+  target_profit_cad: 10,
+  target_days: 10,
 };
 const prods = $('Pick variant').all().map(i => i.json);
 const out = [];
@@ -35,7 +38,12 @@ $input.all().forEach((item, idx) => {
   if (p.competition === 'crowded') flags.push('crowded: ' + p.listed_by_stores + ' stores already sell it');
   if (p.competition === 'saturated') flags.push('saturated: ' + p.listed_by_stores + ' stores sell it, hard to stand out');
   if (p.similar_count >= 4) flags.push(p.similar_count + ' near-identical copies on CJ');
-  out.push({ json: { ...p, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),
+  const days = ship ? maxDays(ship) : 99;
+  const meets_target = !!ship && profit >= F.target_profit_cad && days <= F.target_days;
+  const misses = [];
+  if (profit < F.target_profit_cad) misses.push('profit under ' + F.target_profit_cad + ' CAD');
+  if (days > F.target_days) misses.push('delivery over ' + F.target_days + ' days');
+  out.push({ json: { ...p, meets_target, target_misses: misses, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),
                      est_profit_cad: profit, margin_pct: Math.round(profit / price * 100), flags,
                      estimate_note: 'Estimates from CJ quotes; excludes sales tax, duties and samples.' } });
 });
