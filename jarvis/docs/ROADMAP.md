@@ -75,6 +75,7 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 ## Phase 4: Shopify launch
 - [ ] Rangéo store (owner started 2026-11-11; step 1 done: rangeo-ca.myshopify.com), in order: 1 Shopify account, 2 settings (CAD, FR+EN, shipping Canada), 3 Shopify Payments, 4 legal pages (Quebec), 5 CJ app + auto-payment, 6 import Vehicle Visor (FR+EN), 7 test order by the owner, 8 JARVIS order alerts
+- [ ] Rangéo legal: Shopify Payments set up as an individual (2026-11-12); register the business name "Rangéo" with the Registraire des entreprises du Québec around the first sales (verify fee/rules on REQ site or with an accountant); GST/QST registration once sales approach 30,000 CAD per 12 months
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
 - [ ] Listing publisher (draft → approval → publish, with idempotency key)
