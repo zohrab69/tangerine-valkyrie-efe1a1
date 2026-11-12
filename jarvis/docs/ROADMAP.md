@@ -75,6 +75,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 
 ## Phase 4: Shopify launch
 - [ ] Rangéo store (owner started 2026-11-11; steps 1-3 done 2026-11-12: rangeo-ca.myshopify.com, shipping Canada free, Shopify Payments submitted as individual), in order: 1 Shopify account, 2 settings (CAD, FR+EN, shipping Canada), 3 Shopify Payments, 4 legal pages (Quebec), 5 CJ app + auto-payment, 6 import Vehicle Visor (FR+EN), 7 test order by the owner, 8 JARVIS order alerts
+- [x] Rangéo step 4 (policies FR+EN) and 5a (CJ app: store py98h6-qu "Rangéo" authorized, auto-sync on) done 2026-11-12. To do: turn on "Fulfill Authorized Orders" (tracking to customers), CJ auto-payment with a per-order limit
+- [ ] REMINDER: CJ-Shopify authorization expires 2027-02-10 - re-authorize before then (add a JARVIS alert in late January 2027)
 - [ ] Rangéo legal: Shopify Payments set up as an individual (2026-11-12); register the business name "Rangéo" with the Registraire des entreprises du Québec around the first sales (verify fee/rules on REQ site or with an accountant); GST/QST registration once sales approach 30,000 CAD per 12 months
 - [ ] Store, French and English, legal pages (privacy per Law 25, returns, shipping), Shopify Payments
 - [ ] Dropship app (DSers/CJ) and test orders to yourself
