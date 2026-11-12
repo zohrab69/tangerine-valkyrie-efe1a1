@@ -24,6 +24,15 @@ N['Finance'] = run('6-finance.js', N['Pick variant'].map(p => ({ json: { result:
 N['Finance'].forEach(x => console.log(x.json.pid, x.json.shipping && x.json.shipping.name, 'landed', x.json.landed_cad, 'price', x.json.price_cad, 'profit', x.json.est_profit_cad, x.json.flags));
 N['Shortlist'] = run('7-shortlist.js', N['Finance'], N, sd);
 console.log('order', N['Shortlist'][0].json.top.map(p => p.pid));
+N['Market check items'] = run('13-market-items.js', [{ json: {} }], N, sd);
+console.log('queries:', N['Market check items'].map(x => x.json.q));
+const shopping = { shopping_results: [29.99, 34.99, 39.99, 27.5].map(p => ({ extracted_price: p })) };
+const tl = v => ({ interest_over_time: { timeline_data: v.map(x => ({ values: [{ extracted_value: x }] })) } });
+N['Google Shopping (Canada)'] = [{ json: shopping }, { json: { shopping_results: [{ extracted_price: 9 }, { extracted_price: 10 }, { extracted_price: 11 }] } }, { json: { error: 'Invalid API key' } }];
+N['Google Trends (Canada)'] = [{ json: tl([20,22,25,24,30,35,40,45,50,55,60,70,72]) }, { json: tl([50,50,50,50,40,30,30,30,30,25,20,20,20]) }, { json: {} }];
+N['Market verdict'] = run('14-market-verdict.js', [{ json: {} }], N, sd);
+const mv = N['Market verdict'][0].json;
+console.log('market_ok', mv.market_ok, 'dropped', mv.dropped, 'kept', mv.top.map(p => p.pid + (p.market.hot ? ' HOT' : '') + ' ratio ' + p.market.ratio + ' ' + p.market.trend));
 const ai = { choices: [{ message: { content: '{"notes":[{"n":1,"note":"Home cooks; quality varies."}]}' } }] };
 N['Report'] = run('8-report.js', [{ json: ai }], N, sd);
 N['Report'].forEach(r => console.log('photo:', r.json.photo || '(none)', '|', r.json.caption.split('\n').slice(0, 2).join(' / ')));

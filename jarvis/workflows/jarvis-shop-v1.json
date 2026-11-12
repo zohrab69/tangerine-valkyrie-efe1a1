@@ -1,0 +1,382 @@
+{
+  "name": "JARVIS Shop v1 (Rang\u00e9o orders)",
+  "nodes": [
+    {
+      "id": "p0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -280
+      ],
+      "parameters": {
+        "width": 1250,
+        "height": 210,
+        "content": "## JARVIS Shop v1 - Rang\u00e9o store manager\n**Top:** every new Shopify order -> Telegram alert (items, total, estimated profit, city) + memory (the JARVIS screen announces it, the morning briefing counts it).\n**Bottom:** every day 8:45 (Toronto) -> paid orders not shipped after 4 days -> one alert. Silent when all is fine.\nCredentials: **Shopify Access Token** (custom app, read orders) in both Shopify nodes; **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Settings -> Error workflow -> JARVIS Alerts v1."
+      }
+    },
+    {
+      "id": "p1",
+      "name": "New Shopify order",
+      "type": "n8n-nodes-base.shopifyTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "authentication": "accessToken",
+        "topic": "orders/create"
+      },
+      "webhookId": "ac40b1ee-1832-4af1-adaf-64fe670ef9c9"
+    },
+    {
+      "id": "p2",
+      "name": "Format order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// New Rang\u00e9o order (Shopify webhook orders/create) -> Telegram alert + memory row.\n// COSTS: supplier cost + shipping in USD per CJ SKU (from CJ). Add a line for each new product.\nconst COSTS = { 'CJQCNBQC00122-Black': 12.90 };\nconst USD_TO_CAD = 1.40, FEE_PCT = 0.029, FEE_FIXED = 0.30;\nconst o = $input.first().json || {};\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst items = (o.line_items || []).map(li => ({ title: li.title || li.name || '?', qty: Number(li.quantity) || 1, sku: li.sku || '', price: Number(li.price) || 0 }));\nconst total = Number(o.total_price ?? o.current_total_price ?? 0);\nconst tax = Number(o.total_tax ?? 0);\nlet cost = 0, unknown = [];\nfor (const it of items) {\n  const key = Object.keys(COSTS).find(k => it.sku && (it.sku === k || it.sku.includes(k) || k.includes(it.sku)));\n  if (key) cost += COSTS[key] * USD_TO_CAD * it.qty; else unknown.push(it.title);\n}\nconst fees = total * FEE_PCT + FEE_FIXED;\nconst profit = unknown.length ? null : +(total - tax - cost - fees).toFixed(2);\nconst city = [o.shipping_address?.city, o.shipping_address?.province_code].filter(Boolean).join(', ');\nconst local = new Date(o.created_at || Date.now()).toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst text = [\n  '\ud83d\uded2 <b>New Rang\u00e9o order ' + esc(o.name || ('#' + (o.order_number || ''))) + '</b>',\n  ...items.map(it => '\u2022 ' + it.qty + ' \u00d7 ' + esc(it.title)),\n  'Total: ' + total.toFixed(2) + ' ' + esc(o.currency || 'CAD') + (tax ? ' (tax ' + tax.toFixed(2) + ')' : ''),\n  profit !== null ? 'Est. profit: ~' + profit + ' CAD (before ads)' : 'Est. profit: unknown (add the cost of ' + esc(unknown.join(', ')) + ' to COSTS)',\n  city ? 'Ship to: ' + esc(city) : '',\n  'Payment: ' + esc(o.financial_status || '?') + ' \u00b7 ' + esc(local),\n  'CJ will pay and ship it automatically at the next time point (9:00 / 17:00).',\n].filter(Boolean).join('\\n');\nconst summary = `New Rang\u00e9o order ${o.name || ''} (${local}): ${items.map(i => i.qty + 'x ' + i.title).join(', ')}; total ${total.toFixed(2)} ${o.currency || 'CAD'}` + (profit !== null ? `; est. profit ~${profit} CAD` : '');\nreturn [{ json: { text, kind: 'order', summary: summary.slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "p3",
+      "name": "Send order alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        -80
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    },
+    {
+      "id": "p4",
+      "name": "Order memory row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: j.summary } }];"
+      }
+    },
+    {
+      "id": "p5",
+      "name": "Save order to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "p6",
+      "name": "Every day 8:45",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        380
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "p7",
+      "name": "Check now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        540
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "p8",
+      "name": "Open unshipped orders",
+      "type": "n8n-nodes-base.shopify",
+      "typeVersion": 1,
+      "position": [
+        240,
+        460
+      ],
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "order",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 50,
+        "options": {
+          "status": "open",
+          "financialStatus": "paid",
+          "fulfillmentStatus": "unshipped"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "p9",
+      "name": "Late orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        460
+      ],
+      "parameters": {
+        "jsCode": "// Daily check: paid Rang\u00e9o orders still not shipped after 4 days -> one Telegram alert (silent otherwise).\nconst DAYS = 4;\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst orders = $input.all().map(i => i.json || {}).filter(o => o.id && o.created_at && !o.cancelled_at);\nconst late = orders.filter(o => (Date.now() - new Date(o.created_at)) / 86400e3 > DAYS && (o.fulfillment_status === null || o.fulfillment_status === undefined || o.fulfillment_status === 'partial'));\nconst text = '\u26a0\ufe0f <b>Rang\u00e9o: ' + late.length + ' order(s) not shipped after ' + DAYS + ' days</b>\\n' +\n  late.slice(0, 10).map(o => '\u2022 ' + esc(o.name) + ' from ' + new Date(o.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }) + ', ' + esc(o.total_price) + ' ' + esc(o.currency)).join('\\n') +\n  '\\nCheck CJ \u2192 Orders: unpaid, out of stock, or address problem? Customers may ask for refunds if it waits too long.';\nreturn [{ json: { send: late.length > 0, text, kind: 'error', summary: `Rang\u00e9o: ${late.length} order(s) not shipped after ${DAYS} days: ${late.map(o => o.name).join(', ')}` } }];\n"
+      }
+    },
+    {
+      "id": "p10",
+      "name": "Any late?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "p10c",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "p11",
+      "name": "Send late alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        380
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    },
+    {
+      "id": "p12",
+      "name": "Late memory row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        560
+      ],
+      "parameters": {
+        "jsCode": "const j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: j.summary } }];"
+      }
+    },
+    {
+      "id": "p13",
+      "name": "Save late to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        560
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "New Shopify order": {
+      "main": [
+        [
+          {
+            "node": "Format order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format order": {
+      "main": [
+        [
+          {
+            "node": "Send order alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Order memory row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order memory row": {
+      "main": [
+        [
+          {
+            "node": "Save order to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day 8:45": {
+      "main": [
+        [
+          {
+            "node": "Open unshipped orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check now": {
+      "main": [
+        [
+          {
+            "node": "Open unshipped orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open unshipped orders": {
+      "main": [
+        [
+          {
+            "node": "Late orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Late orders": {
+      "main": [
+        [
+          {
+            "node": "Any late?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any late?": {
+      "main": [
+        [
+          {
+            "node": "Send late alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Late memory row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Late memory row": {
+      "main": [
+        [
+          {
+            "node": "Save late to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

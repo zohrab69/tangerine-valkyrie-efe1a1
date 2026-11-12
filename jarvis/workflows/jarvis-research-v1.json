@@ -13,7 +13,7 @@
       "parameters": {
         "width": 1500,
         "height": 230,
-        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\nAll money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message).\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
+        "content": "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\nRuns every **Monday 10:00** (Toronto) and when you click Execute. Market check: only products that others already sell at 2x+ our cost and whose Google searches in Canada are not falling are sent (\ud83d\udd25 = rising). Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **SerpApi** (Query Auth, name api_key) in *Google Shopping* and *Google Trends*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\nAll money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message).\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
       }
     },
     {
@@ -365,6 +365,136 @@
       }
     },
     {
+      "id": "r28",
+      "name": "Market check items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// One market check per shortlisted product: a short, searchable name (CJ titles are long and noisy).\nconst STOP = /\\b(new|hot|sale|car styling|accessories|accessory|for|with|and|the|multi ?functional|portable|creative|household|tool|tools|1pc|pcs|set)\\b/gi;\nconst top = $('Shortlist').first().json.top || [];\nreturn top.map((p, i) => {\n  const q = String(p.name).split(/[-,|(]/)[0].replace(STOP, ' ').replace(/\\s+/g, ' ').trim().split(' ').slice(0, 5).join(' ');\n  return { json: { i, q: q || String(p.name).slice(0, 40) } };\n});\n"
+      }
+    },
+    {
+      "id": "r29",
+      "name": "Google Shopping (Canada)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3160,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_shopping"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "gl",
+              "value": "ca"
+            },
+            {
+              "name": "hl",
+              "value": "en"
+            },
+            {
+              "name": "location",
+              "value": "Canada"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "r30",
+      "name": "Google Trends (Canada)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_trends"
+            },
+            {
+              "name": "q",
+              "value": "={{ $('Market check items').item.json.q }}"
+            },
+            {
+              "name": "geo",
+              "value": "CA"
+            },
+            {
+              "name": "date",
+              "value": "today 3-m"
+            },
+            {
+              "name": "data_type",
+              "value": "TIMESERIES"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "r31",
+      "name": "Market verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3560,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Market check (SerpApi: Google Shopping Canada prices + Google Trends Canada, last 3 months).\n// Keeps only products people already pay well for (market price >= 2x our landed cost) and whose\n// search interest is not falling. \ud83d\udd25 = rising + price gap >= 2.5x + owner targets met.\nconst s = $('Shortlist').first().json;\nconst items = $('Market check items').all().map(i => i.json);\nconst shop = $('Google Shopping (Canada)').all().map(i => i.json || {});\nconst trends = $('Google Trends (Canada)').all().map(i => i.json || {});\nconst USD_TO_CAD = 1.40;\nconst median = a => { const b = [...a].sort((x, y) => x - y); return b.length ? (b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : null; };\nlet checked = 0;\nconst enriched = s.top.map((p, i) => {\n  const sh = shop[i] || {}, tr = trends[i] || {};\n  const prices = (sh.shopping_results || []).map(r => Number(r.extracted_price)).filter(x => x > 0 && x < 1000);\n  const mp = prices.length >= 3 ? +median(prices).toFixed(2) : null;\n  const tl = ((tr.interest_over_time || {}).timeline_data || []).map(t => Number(((t.values || [])[0] || {}).extracted_value) || 0);\n  let trend = null, trend_pct = null;\n  if (tl.length >= 8) {\n    const avg = a => a.reduce((x, y) => x + y, 0) / a.length;\n    const first = avg(tl.slice(0, 4)), last = avg(tl.slice(-4));\n    trend_pct = first > 0 ? Math.round((last - first) / first * 100) : (last > 0 ? 100 : 0);\n    trend = trend_pct >= 20 ? 'rising' : trend_pct <= -20 ? 'falling' : 'flat';\n  }\n  if (mp !== null || trend !== null) checked++;\n  const ratio = mp ? +(mp / p.landed_cad).toFixed(1) : null;\n  const hot = ratio !== null && ratio >= 2.5 && trend === 'rising' && p.meets_target;\n  const pass = ratio !== null && ratio >= 2 && trend !== 'falling';   // no market data = not proven, not sent\n  return { ...p, market: { query: items[i] ? items[i].q : '', median_price_cad: mp, offers: prices.length, ratio, trend, trend_pct, hot, pass,\n    note: sh.error || tr.error ? 'market data error: ' + String(sh.error || tr.error).slice(0, 100) : null } };\n});\nconst marketOk = checked > 0;\nlet kept = marketOk ? enriched.filter(p => p.market.pass) : enriched;\nkept.sort((a, b) => Number(b.market.hot) - Number(a.market.hot));\nconst facts = kept.map((p, n) => ({ n: n + 1, name: p.name, landed_cad: p.landed_cad, price_cad: p.price_cad, est_profit_cad: p.est_profit_cad,\n  market_median_price_cad: p.market.median_price_cad, price_gap: p.market.ratio, search_trend: p.market.trend, competition: p.competition, flags: p.flags }));\nconst instructions = 'You are the JARVIS e-commerce research analyst for a new Shopify store selling in Canada. ' +\n  'For each product write one short note (max 25 words): who would buy it, whether the market price leaves room, and the main risk. Use ONLY the facts given; ' +\n  'do not invent sales numbers, trends, reviews or prices. Reply with JSON only: {\"notes\":[{\"n\":1,\"note\":\"...\"}]}';\nreturn [{ json: { ...s, top: kept, all_checked: enriched, market_ok: marketOk, dropped: enriched.length - kept.length,\n  ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },\n    messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify(facts) }] } } }];\n"
+      }
+    },
+    {
       "id": "r16",
       "name": "AI notes (free)",
       "type": "n8n-nodes-base.httpRequest",
@@ -397,7 +527,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "// One photo message per product (caption = the facts), then a short summary message.\n// Works with or without the AI notes and with or without images.\nconst s = $('Shortlist').first().json;\nconst plan = $('Research plan').first().json;\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet notes = {};\ntry {\n  const r = $input.first().json || {};\n  const txt = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '');\n  for (const x of (JSON.parse(txt).notes || [])) notes[x.n] = x.note;\n} catch (e) { /* AI notes are optional */ }\nconst items = s.top.map((p, i) => {\n  const lines = [\n    `<b>${i + 1}. ${esc(p.name)}</b>`,\n    `${{ healthy: '\ud83d\udfe2', crowded: '\ud83d\udfe0', saturated: '\ud83d\udd34', unproven: '\u26aa' }[p.competition] || ''} Competition: ${p.competition} (${p.listed_by_stores} stores on CJ` +\n      (p.similar_count ? `, ${p.similar_count} similar` : '') + ')' + (p.sold_count ? ` \u00b7 ${p.sold_count} sold` : ''),\n    `Cost ${p.cost_usd.toFixed(2)} USD + shipping ${p.shipping ? p.shipping.usd.toFixed(2) + ' USD (' + esc(p.shipping.name) + ', ' + esc(p.shipping.days) + ' days)' : 'unknown'}`,\n    `Landed ~${p.landed_cad} CAD | price ${p.price_cad} CAD | est. profit ${p.est_profit_cad} CAD (${p.margin_pct}%)`,\n    `CJ SKU ${esc(p.sku || p.pid)}`,\n    p.meets_target ? '\ud83c\udfaf Meets your targets (10+ CAD profit, 10 days or less)' : '\u2716\ufe0f Misses target: ' + esc((p.target_misses || []).join(', ')),\n  ];\n  if (p.flags.length) lines.push('Watch: ' + esc(p.flags.join('; ')));\n  if (notes[i + 1]) lines.push('<i>' + esc(notes[i + 1]) + '</i>');\n  return { json: { photo: p.image || '', has_photo: !!p.image, caption: lines.join('\\n').slice(0, 1000), text: lines.join('\\n') } };\n});\nconst summary = '<b>JARVIS product research</b> (' + esc(plan.keywords.join(', ')) + ')\\n' +\n  s.top.length + ' products above. \ud83c\udfaf = meets your targets (10+ CAD profit, delivery 10 days or less), listed first; then by competition and profit.\\n' +\n  (s.top.some(p => p.meets_target) ? '' : 'No product met both targets this week.\\n') +\n  '\ud83d\udfe2 healthy = proven but not overcrowded \u00b7 \ud83d\udfe0 crowded \u00b7 \ud83d\udd34 saturated \u00b7 \u26aa unproven\\n' +\n  'All money figures are estimates from CJ quotes (USD to CAD at 1.40), before sales tax and duties. Nothing was ordered or published.\\n' +\n  'Next step (not automatic yet): tell JARVIS which numbers interest you. Ordering samples will always ask for your approval first.';\nreturn items.map((it, i) => ({ json: { ...it.json, summary, index: i } }));\n"
+        "jsCode": "// One photo message per product (caption = the facts), then a short summary message.\n// Works with or without the AI notes and with or without images.\nconst s = $('Market verdict').first().json;\nconst plan = $('Research plan').first().json;\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet notes = {};\ntry {\n  const r = $input.first().json || {};\n  const txt = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '');\n  for (const x of (JSON.parse(txt).notes || [])) notes[x.n] = x.note;\n} catch (e) { /* AI notes are optional */ }\nconst items = s.top.map((p, i) => {\n  const lines = [\n    `<b>${i + 1}. ${esc(p.name)}</b>`,\n    `${{ healthy: '\ud83d\udfe2', crowded: '\ud83d\udfe0', saturated: '\ud83d\udd34', unproven: '\u26aa' }[p.competition] || ''} Competition: ${p.competition} (${p.listed_by_stores} stores on CJ` +\n      (p.similar_count ? `, ${p.similar_count} similar` : '') + ')' + (p.sold_count ? ` \u00b7 ${p.sold_count} sold` : ''),\n    `Cost ${p.cost_usd.toFixed(2)} USD + shipping ${p.shipping ? p.shipping.usd.toFixed(2) + ' USD (' + esc(p.shipping.name) + ', ' + esc(p.shipping.days) + ' days)' : 'unknown'}`,\n    `Landed ~${p.landed_cad} CAD | price ${p.price_cad} CAD | est. profit ${p.est_profit_cad} CAD (${p.margin_pct}%)`,\n    p.market && (p.market.median_price_cad || p.market.trend) ? `${p.market.hot ? '\ud83d\udd25 ' : ''}Market: ` +\n      (p.market.median_price_cad ? `others sell at ~${p.market.median_price_cad} CAD (${p.market.ratio}\u00d7 your cost)` : 'price n/a') +\n      (p.market.trend ? `, Google searches ${p.market.trend} (${p.market.trend_pct > 0 ? '+' : ''}${p.market.trend_pct}% in 3 months)` : '') : 'Market: not checked',\n    `CJ SKU ${esc(p.sku || p.pid)}`,\n    p.meets_target ? '\ud83c\udfaf Meets your targets (10+ CAD profit, 10 days or less)' : '\u2716\ufe0f Misses target: ' + esc((p.target_misses || []).join(', ')),\n  ];\n  if (p.flags.length) lines.push('Watch: ' + esc(p.flags.join('; ')));\n  if (notes[i + 1]) lines.push('<i>' + esc(notes[i + 1]) + '</i>');\n  return { json: { photo: p.image || '', has_photo: !!p.image, caption: lines.join('\\n').slice(0, 1000), text: lines.join('\\n') } };\n});\nconst summary = '<b>JARVIS product research</b> (' + esc(plan.keywords.join(', ')) + ')\\n' +\n(s.market_ok ? (s.dropped ? s.dropped + ' product(s) removed: market price too low, no market data, or searches falling.\\n' : '') + (s.top.length ? '' : 'No product passed the market checks this week.\\n') + '\ud83d\udd25 = searches rising, others sell at 2.5x+ your cost, meets your targets.\\n' : 'Market check unavailable this week (SerpApi key missing or failed).\\n') +\n  s.top.length + ' products above. \ud83c\udfaf = meets your targets (10+ CAD profit, delivery 10 days or less), listed first; then by competition and profit.\\n' +\n  (s.top.some(p => p.meets_target) ? '' : 'No product met both targets this week.\\n') +\n  '\ud83d\udfe2 healthy = proven but not overcrowded \u00b7 \ud83d\udfe0 crowded \u00b7 \ud83d\udd34 saturated \u00b7 \u26aa unproven\\n' +\n  'All money figures are estimates from CJ quotes (USD to CAD at 1.40), before sales tax and duties. Nothing was ordered or published.\\n' +\n  'Next step (not automatic yet): tell JARVIS which numbers interest you. Ordering samples will always ask for your approval first.';\nif (!items.length) return [{ json: { photo: '', has_photo: false, caption: '', text: '', summary, index: 0 } }];   // nothing passed: summary only\nreturn items.map((it, i) => ({ json: { ...it.json, summary, index: i } }));\n"
       }
     },
     {
@@ -444,7 +574,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "// After the product photos (runs once): the summary, plus the full text of any product whose photo\n// could not be sent (no image, or Telegram rejected it), so nothing is lost.\nconst reports = $('Report').all().map(i => i.json);\nconst results = $input.all().map(i => i.json || {});\nconst failed = reports.filter((r, i) => !results[i] || results[i].error || !r.has_photo);\nlet msg = reports.length ? reports[0].summary : '';\nif (failed.length) msg = failed.map(r => r.text).join('\\n\\n') + '\\n\\n' + msg;\nreturn [{ json: { report: msg.slice(0, 4000) } }];\n"
+        "jsCode": "// After the product photos (runs once): the summary, plus the full text of any product whose photo\n// could not be sent (no image, or Telegram rejected it), so nothing is lost.\nconst reports = $('Report').all().map(i => i.json);\nconst results = $input.all().map(i => i.json || {});\nconst failed = reports.filter((r, i) => r.text && (!results[i] || results[i].error || !r.has_photo));\nlet msg = reports.length ? reports[0].summary : '';\nif (failed.length) msg = failed.map(r => r.text).join('\\n\\n') + '\\n\\n' + msg;\nreturn [{ json: { report: msg.slice(0, 4000) } }];\n"
       }
     },
     {
@@ -457,7 +587,7 @@
         100
       ],
       "parameters": {
-        "jsCode": "// What JARVIS says out loud after the report (spoken by the free Piper voice on the server). Short, factual, and only about what really happened.\nlet top = [];\ntry { top = $('Shortlist').first().json.top || []; } catch (e) { top = []; }\nconst hNum = Number(new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })) % 24;\nconst hour = ((hNum % 12) || 12) + (hNum < 12 ? ' AM' : ' PM');\nconst NAME = 'Zohrab';\nconst greet = hNum < 12 ? 'Good morning' : hNum < 18 ? 'Good afternoon' : 'Good evening';\nlet text;\nif (top.length) {\n  const hits = top.filter(p => p.meets_target).length;\n  const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];\n  const shortName = best.name.split(/[-,|]/)[0].trim().split(/\\s+/).slice(0, 6).join(' ');\n  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +\n         `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +\n         (hits ? `${hits} of them meet${hits === 1 ? 's' : ''} your targets. ` : 'None met both of your targets this week. ') + `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;\n} else {\n  text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;\n}\nreturn [{ json: { tts_body: { text: text.slice(0, 1200), lang: 'en', format: 'mp3' }, spoken_text: text } }];\n"
+        "jsCode": "// What JARVIS says out loud after the report (spoken by the free Piper voice on the server). Short, factual, and only about what really happened.\nlet top = [];\ntry { top = $('Market verdict').first().json.top || []; } catch (e) { top = []; }\nconst hNum = Number(new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })) % 24;\nconst hour = ((hNum % 12) || 12) + (hNum < 12 ? ' AM' : ' PM');\nconst NAME = 'Zohrab';\nconst greet = hNum < 12 ? 'Good morning' : hNum < 18 ? 'Good afternoon' : 'Good evening';\nlet text;\nif (top.length) {\n  const hits = top.filter(p => p.meets_target).length;\n  const hot = top.filter(p => p.market && p.market.hot).length;\n  const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];\n  const shortName = best.name.split(/[-,|]/)[0].trim().split(/\\s+/).slice(0, 6).join(' ');\n  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +\n         `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +\n         (hot ? `${hot} look${hot === 1 ? 's' : ''} hot: searches rising and a good price gap. ` : '') + (hits ? `${hits} meet${hits === 1 ? 's' : ''} your targets. ` : 'None met both of your targets this week. ') + `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;\n} else {\n  text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;\n}\nreturn [{ json: { tts_body: { text: text.slice(0, 1200), lang: 'en', format: 'mp3' }, spoken_text: text } }];\n"
       }
     },
     {
@@ -537,7 +667,7 @@
         320
       ],
       "parameters": {
-        "jsCode": "// One memory row so the rest of JARVIS (screen, Telegram) knows what the research report contained.\nlet top = [];\ntry { top = $('Shortlist').first().json.top || []; } catch (e) { top = []; }\nconst plan = $('Research plan').first().json;\nconst day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });\nconst list = top.map((p, i) => `${i + 1}. ${p.name.split(/[-,|]/)[0].trim().slice(0, 60)} (CJ SKU ${p.sku || p.pid}, est. profit ${p.est_profit_cad} CAD, ${p.listed_by_stores} stores, competition ${p.competition}${p.meets_target ? ', meets targets' : ''})`).join('; ');\nconst summary = `Product research report sent to the owner's Telegram on ${day} (themes: ${plan.keywords.join(', ')}), with photos and a voice message. ` +\n  (top.length ? `Products: ${list}. Estimates only; nothing ordered.` : 'No product passed the filters.');\nreturn [{ json: { kind: 'research', summary: summary.slice(0, 1500) } }];\n"
+        "jsCode": "// One memory row so the rest of JARVIS (screen, Telegram) knows what the research report contained.\nlet top = [];\ntry { top = $('Market verdict').first().json.top || []; } catch (e) { top = []; }\nconst plan = $('Research plan').first().json;\nconst day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });\nconst list = top.map((p, i) => `${i + 1}. ${p.name.split(/[-,|]/)[0].trim().slice(0, 60)} (CJ SKU ${p.sku || p.pid}, est. profit ${p.est_profit_cad} CAD, ${p.listed_by_stores} stores, competition ${p.competition}${p.meets_target ? ', meets targets' : ''}${p.market && p.market.median_price_cad ? ', market ~' + p.market.median_price_cad + ' CAD' : ''}${p.market && p.market.trend ? ', searches ' + p.market.trend : ''}${p.market && p.market.hot ? ', HOT' : ''})`).join('; ');\nconst summary = `Product research report sent to the owner's Telegram on ${day} (themes: ${plan.keywords.join(', ')}), with photos and a voice message. ` +\n  (top.length ? `Products: ${list}. Estimates only; nothing ordered.` : 'No product passed the filters.');\nreturn [{ json: { kind: 'research', summary: summary.slice(0, 1500) } }];\n"
       }
     },
     {
@@ -738,6 +868,50 @@
       ]
     },
     "Shortlist": {
+      "main": [
+        [
+          {
+            "node": "Market check items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market check items": {
+      "main": [
+        [
+          {
+            "node": "Google Shopping (Canada)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Shopping (Canada)": {
+      "main": [
+        [
+          {
+            "node": "Google Trends (Canada)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Trends (Canada)": {
+      "main": [
+        [
+          {
+            "node": "Market verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market verdict": {
       "main": [
         [
           {

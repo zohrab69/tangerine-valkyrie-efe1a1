@@ -267,9 +267,9 @@ def ifnode(id_, name, pos, expr):
 rn = [
   node("r0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -260], {"width": 1500, "height": 230, "content":
       "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\n"
-      "Runs every **Monday 10:00** (Toronto) and when you click Execute. Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
+      "Runs every **Monday 10:00** (Toronto) and when you click Execute. Market check: only products that others already sell at 2x+ our cost and whose Google searches in Canada are not falling are sent (🔥 = rising). Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
       "gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\n"
-      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\n"
+      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **SerpApi** (Query Auth, name api_key) in *Google Shopping* and *Google Trends*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\n"
       "All money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message)."}),
   node("r1", "Every Monday 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
        {"rule": {"interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 10}]}}),
@@ -304,6 +304,22 @@ rn = [
        "options": THROTTLE}, onError="continueRegularOutput"),
   node("r14", "Finance (no AI)", "n8n-nodes-base.code", 2, [2640, 200], {"jsCode": rcode("6-finance.js")}),
   node("r15", "Shortlist", "n8n-nodes-base.code", 2, [2860, 200], {"jsCode": rcode("7-shortlist.js")}),
+  node("r28", "Market check items", "n8n-nodes-base.code", 2, [2960, 420], {"jsCode": rcode("13-market-items.js")}),
+  node("r29", "Google Shopping (Canada)", "n8n-nodes-base.httpRequest", 4.2, [3160, 420], {
+       "method": "GET", "url": "https://serpapi.com/search.json",
+       "authentication": "genericCredentialType", "genericAuthType": "httpQueryAuth",
+       "sendQuery": True, "queryParameters": {"parameters": [
+           {"name": "engine", "value": "google_shopping"}, {"name": "q", "value": "={{ $json.q }}"},
+           {"name": "gl", "value": "ca"}, {"name": "hl", "value": "en"}, {"name": "location", "value": "Canada"}]},
+       "options": THROTTLE}, onError="continueRegularOutput", alwaysOutputData=True),
+  node("r30", "Google Trends (Canada)", "n8n-nodes-base.httpRequest", 4.2, [3360, 420], {
+       "method": "GET", "url": "https://serpapi.com/search.json",
+       "authentication": "genericCredentialType", "genericAuthType": "httpQueryAuth",
+       "sendQuery": True, "queryParameters": {"parameters": [
+           {"name": "engine", "value": "google_trends"}, {"name": "q", "value": "={{ $('Market check items').item.json.q }}"},
+           {"name": "geo", "value": "CA"}, {"name": "date", "value": "today 3-m"}, {"name": "data_type", "value": "TIMESERIES"}]},
+       "options": THROTTLE}, onError="continueRegularOutput", alwaysOutputData=True),
+  node("r31", "Market verdict", "n8n-nodes-base.code", 2, [3560, 420], {"jsCode": rcode("14-market-verdict.js")}),
   node("r16", "AI notes (free)", "n8n-nodes-base.httpRequest", 4.2, [3080, 200], {
        "method": "POST", "url": "http://omniroute:20128/v1/chat/completions",
        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
@@ -336,7 +352,7 @@ links = [L("Every Monday 10:00", "Research plan"), L("Run now (manual)", "Resear
          L("CJ product search", "Screen products"), L("Screen products", "Nothing found?"),
          L("Nothing found?", "Nothing-found report", 0), L("Nothing found?", "CJ variants", 1),
          L("CJ variants", "Pick variant"), L("Pick variant", "CJ shipping to Canada"), L("CJ shipping to Canada", "Finance (no AI)"),
-         L("Finance (no AI)", "Shortlist"), L("Shortlist", "AI notes (free)"), L("AI notes (free)", "Report"),
+         L("Finance (no AI)", "Shortlist"), L("Shortlist", "Market check items"), L("Market check items", "Google Shopping (Canada)"), L("Google Shopping (Canada)", "Google Trends (Canada)"), L("Google Trends (Canada)", "Market verdict"), L("Market verdict", "AI notes (free)"), L("AI notes (free)", "Report"),
          L("Report", "Send product photo"), L("Send product photo", "Summary"), L("Summary", "Send report"), L("Nothing-found report", "Send report"),
          L("Send report", "What JARVIS says"), L("What JARVIS says", "JARVIS voice (Piper, free)"), L("JARVIS voice (Piper, free)", "Send voice message", 0)]
 rc = {}
@@ -644,3 +660,47 @@ lnk(bc, "Send briefing", "JARVIS voice"); lnk(bc, "JARVIS voice", "Send voice", 
 (here.parent / "jarvis-briefing-v1.json").write_text(json.dumps({"name": "JARVIS Briefing v1 (morning)", "nodes": bn, "connections": bc,
   "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
 print("wrote jarvis-briefing-v1.json")
+
+# ---------------------------------------------------------------------------
+# Shop v1: Rangéo (Shopify) manager - new order alerts + daily stuck-order check.
+def shcode(f): return (here / "shop" / f).read_text()
+SHOP_AUTH = {"authentication": "accessToken"}
+sh = [
+  node("p0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -280], {"width": 1250, "height": 210, "content":
+      "## JARVIS Shop v1 - Rangéo store manager\n"
+      "**Top:** every new Shopify order -> Telegram alert (items, total, estimated profit, city) + memory (the JARVIS screen announces it, the morning briefing counts it).\n"
+      "**Bottom:** every day 8:45 (Toronto) -> paid orders not shipped after 4 days -> one alert. Silent when all is fine.\n"
+      "Credentials: **Shopify Access Token** (custom app, read orders) in both Shopify nodes; **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Settings -> Error workflow -> JARVIS Alerts v1."}),
+  node("p1", "New Shopify order", "n8n-nodes-base.shopifyTrigger", 1, [0, 0], {**SHOP_AUTH, "topic": "orders/create"}, webhookId="ac40b1ee-1832-4af1-adaf-64fe670ef9c9"),
+  node("p2", "Format order", "n8n-nodes-base.code", 2, [220, 0], {"jsCode": shcode("1-new-order.js")}),
+  node("p3", "Send order alert", "n8n-nodes-base.telegram", 1.2, [440, -80], {
+       "chatId": OWNER_CHAT_ID, "text": "={{ $json.text }}", "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
+  node("p4", "Order memory row", "n8n-nodes-base.code", 2, [440, 100], {"jsCode": "const j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: j.summary } }];"}),
+  node("p5", "Save order to memory", "n8n-nodes-base.dataTable", 1.1, [660, 100], {
+       "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+  node("p6", "Every day 8:45", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 380], {"rule": {"interval": [{"field": "cronExpression", "expression": "45 8 * * *"}]}}),
+  node("p7", "Check now", "n8n-nodes-base.manualTrigger", 1, [0, 540], {}),
+  node("p8", "Open unshipped orders", "n8n-nodes-base.shopify", 1, [240, 460], {**SHOP_AUTH,
+       "resource": "order", "operation": "getAll", "returnAll": False, "limit": 50,
+       "options": {"status": "open", "financialStatus": "paid", "fulfillmentStatus": "unshipped"}},
+       alwaysOutputData=True),
+  node("p9", "Late orders", "n8n-nodes-base.code", 2, [460, 460], {"jsCode": shcode("2-stuck.js")}),
+  ifnode("p10", "Any late?", [680, 460], "={{ $json.send === true }}"),
+  node("p11", "Send late alert", "n8n-nodes-base.telegram", 1.2, [900, 380], {
+       "chatId": OWNER_CHAT_ID, "text": "={{ $json.text }}", "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
+  node("p12", "Late memory row", "n8n-nodes-base.code", 2, [900, 560], {"jsCode": "const j = $input.first().json;\nreturn [{ json: { kind: j.kind, summary: j.summary } }];"}),
+  node("p13", "Save late to memory", "n8n-nodes-base.dataTable", 1.1, [1120, 560], {
+       "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
+       "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
+       onError="continueRegularOutput"),
+]
+shc = {}
+lnk(shc, "New Shopify order", "Format order"); lnk(shc, "Format order", "Send order alert"); lnk(shc, "Format order", "Order memory row"); lnk(shc, "Order memory row", "Save order to memory")
+for t in ("Every day 8:45", "Check now"): lnk(shc, t, "Open unshipped orders")
+lnk(shc, "Open unshipped orders", "Late orders"); lnk(shc, "Late orders", "Any late?")
+lnk(shc, "Any late?", "Send late alert", 0); lnk(shc, "Any late?", "Late memory row", 0); lnk(shc, "Late memory row", "Save late to memory")
+(here.parent / "jarvis-shop-v1.json").write_text(json.dumps({"name": "JARVIS Shop v1 (Rangéo orders)", "nodes": sh, "connections": shc,
+  "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
+print("wrote jarvis-shop-v1.json")

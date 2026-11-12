@@ -11,6 +11,7 @@ const waiting = rows.filter(r => (r.kind === 'approval_pending' && !later(r, 'ap
   .filter(r => hoursAgo(r.createdAt) < 48);
 const decided = rows.filter(r => (r.kind === 'approval' || r.kind === 'sample') && hoursAgo(r.createdAt) < 24);
 const errors = rows.filter(r => r.kind === 'error' && hoursAgo(r.createdAt) < 24);
+const orders = rows.filter(r => r.kind === 'order' && hoursAgo(r.createdAt) < 24);
 const dow = now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long' });
 const today = now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long', month: 'long', day: 'numeric' });
 const facts = {
@@ -19,13 +20,14 @@ const facts = {
   next_research: (dow === 'Monday' && Number(now.toLocaleString('en-CA', { timeZone: TZ, hour: '2-digit', hour12: false })) % 24 < 10) ? 'today at 10:00' : 'next Monday at 10:00',
   waiting_for_owner: waiting.map(r => r.summary.slice(0, 300)),
   decisions_last_24h: decided.map(r => r.summary.slice(0, 300)),
+  rangeo_orders_last_24h: orders.map(r => r.summary.slice(0, 300)),
   problems_last_24h: errors.map(r => r.summary.slice(0, 300)),
   stage: 'Shopify store not open yet; product research and sample testing. Next step: pick a healthy (green) product with good profit and fast delivery, reply "sample" to its photo, then set up Shopify.',
 };
 const instructions = 'You are JARVIS, the AI chief operating officer of Zohrab\'s businesses. Write his MORNING BRIEFING from the FACTS only. ' +
   'Never invent numbers, products, meetings, sales or events; if something is empty, say there is nothing to report on it. ' +
   'Reply in plain text (no JSON, no code blocks) in exactly two parts separated by a line containing only ===SPOKEN===. ' +
-  'Part 1, for Telegram: max 120 words, short lines starting with an emoji (☀️ greeting with the date, 📦 research, ⏳ waiting for you, ✅ decisions, ⚠️ problems only if any, 👉 one suggested next step). ' +
+  'Part 1, for Telegram: max 120 words, short lines starting with an emoji (☀️ greeting with the date, 🛒 Rangéo orders in the last 24 h (say none if none), 📦 research, ⏳ waiting for you, ✅ decisions, ⚠️ problems only if any, 👉 one suggested next step). ' +
   'Part 2, to be read aloud: the same in 2-4 natural spoken sentences, max 70 words, starting "Good morning, Zohrab."';
 return [{ json: { facts, ai_body: { model: 'jarvis-free', max_tokens: 1500,
   messages: [{ role: 'system', content: instructions }, { role: 'user', content: 'FACTS: ' + JSON.stringify(facts) }] } } }];
