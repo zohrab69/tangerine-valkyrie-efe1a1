@@ -88,9 +88,45 @@
     .col.left{order:3} .col.right{order:2}
     .core{width:min(78vw,360px)}
   }
+
+  /* ---------- command center ---------- */
+  #cc{position:fixed;inset:0;z-index:20;background:radial-gradient(1200px 800px at 50% 40%,var(--bgc1) 0%,var(--bgc2) 70%);overflow:auto;padding:18px 22px;display:none}
+  #cc.open{display:block}
+  #cc .cchead{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  #cc .cchead h1{margin:0;font-size:14px;letter-spacing:.4em;color:var(--core);text-shadow:var(--glow);font-weight:600}
+  #cc .ccgrid{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+  #cc .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  #cc .tile{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  #cc .tile b{display:block;font-size:22px;color:#fff;font-variant-numeric:tabular-nums}
+  #cc .tile span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  #cc .tile.na b{color:var(--muted);font-size:15px}
+  #cc .row{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  #cc .row .w{color:var(--muted);min-width:110px;font-size:12px}
+  #cc .conn{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  #cc .ok{color:var(--ok)} #cc .bad{color:var(--warn)}
+  #cc details{border-bottom:1px dashed var(--line);padding:6px 0;font-size:13px}
+  #cc details pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Consolas,monospace;color:#c9dbe7;margin:6px 0 0}
+  #cc svg text{font:12px "Segoe UI",system-ui,sans-serif}
+  @media (max-width:980px){#cc .ccgrid{grid-template-columns:1fr}#cc .tiles{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
+
+<section id="cc" aria-label="Command center">
+  <div class="cchead"><h1>COMMAND CENTER</h1><span><span id="ccgen" class="hint" style="width:auto;margin-right:12px"></span><button id="ccclose" type="button">Back to JARVIS</button></span></div>
+  <div class="ccgrid">
+    <div class="panel"><h2>Team map</h2><svg id="ccmap" viewBox="0 0 640 420" role="img" aria-label="JARVIS and its teams"></svg></div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="panel"><h2>Scoreboard (real data)</h2><div id="cctiles" class="tiles"></div></div>
+      <div class="panel"><h2>Needs your yes</h2><div id="ccpending"></div></div>
+    </div>
+    <div class="panel"><h2>Agent log</h2><div id="cclog" class="scroll" style="max-height:340px"></div></div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="panel"><h2>Connections</h2><div id="ccconn"></div></div>
+      <div class="panel"><h2>What each agent does</h2><div id="ccwf"></div></div>
+    </div>
+  </div>
+</section>
 <div class="grid">
   <header>
     <span class="brand">J.A.R.V.I.S.</span>
@@ -160,6 +196,7 @@
     <button id="theme" type="button" title="Change colours">Theme</button>
     <button id="pic" type="button" title="Use your own background picture">Picture</button>
     <input id="picfile" type="file" accept="image/*" hidden>
+    <button id="ccopen" type="button" title="Command center">Command center</button>
     <button id="full" type="button" title="Full screen">⛶</button>
     <div id="hint" class="hint">Space = hold to talk · Hands-free: just say “JARVIS, …” · Enter = send typed text · Esc = stop speaking</div>
   </footer>
@@ -492,6 +529,57 @@
   }
   pollEvents(); pollTimer = setInterval(pollEvents, 20000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollEvents(); });
+
+
+  // ---------- command center (real data from /api/status; nothing is invented) ----------
+  const STATUS_COLOR = { idle: 'var(--ok)', running: 'var(--core)', 'waiting on you': 'var(--warn)', error: 'var(--bad)', off: 'var(--muted)', 'not built': 'rgba(127,155,176,.45)', unknown: 'var(--muted)' };
+  let ccTimer = null, wfLoaded = false;
+  function ccMap(teams) {
+    const svg = $('ccmap'), cx = 320, cy = 210, R = 160, n = teams.length - 1, outer = teams.filter(t => t.id !== 'jarvis');
+    const ceo = teams.find(t => t.id === 'jarvis') || { status: 'unknown', agents: [] };
+    let h = '';
+    outer.forEach((t, i) => {
+      const a = -Math.PI / 2 + i * 2 * Math.PI / n, x = cx + R * Math.cos(a) * 1.25, y = cy + R * Math.sin(a);
+      h += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x + '" y2="' + y + '" stroke="' + STATUS_COLOR[t.status] + '" stroke-opacity=".45" stroke-dasharray="' + (t.status === 'not built' ? '3 5' : '0') + '"/>';
+    });
+    h += '<circle cx="' + cx + '" cy="' + cy + '" r="58" fill="rgba(63,211,255,.12)" stroke="' + STATUS_COLOR[ceo.status] + '" stroke-width="2"/>' +
+         '<text x="' + cx + '" y="' + (cy - 4) + '" text-anchor="middle" fill="#e9f6ff" style="font-weight:600;letter-spacing:.2em">JARVIS</text>' +
+         '<text x="' + cx + '" y="' + (cy + 16) + '" text-anchor="middle" fill="' + STATUS_COLOR[ceo.status] + '">' + esc(ceo.agents.length + ' agents · ' + ceo.status) + '</text>';
+    outer.forEach((t, i) => {
+      const a = -Math.PI / 2 + i * 2 * Math.PI / n, x = cx + R * Math.cos(a) * 1.25, y = cy + R * Math.sin(a);
+      h += '<g><title>' + esc(t.agents.map(g => g.name + ': ' + g.status).join('\n') || 'not built yet') + '</title>' +
+           '<rect x="' + (x - 66) + '" y="' + (y - 24) + '" width="132" height="48" rx="10" fill="rgba(10,20,34,.92)" stroke="' + STATUS_COLOR[t.status] + '"/>' +
+           '<text x="' + x + '" y="' + (y - 4) + '" text-anchor="middle" fill="#e9f6ff">' + esc(t.name) + '</text>' +
+           '<text x="' + x + '" y="' + (y + 13) + '" text-anchor="middle" fill="' + STATUS_COLOR[t.status] + '">' + esc((t.agents.length ? t.agents.length + ' · ' : '') + t.status) + '</text></g>';
+    });
+    svg.innerHTML = h;
+  }
+  function ccRender(d) {
+    $('ccgen').textContent = 'updated ' + (d.generated || '');
+    ccMap(d.teams || []);
+    const sb = d.scoreboard || {}, tiles = [['Orders today', sb.orders_today], ['Sales today (CAD)', sb.sales_today_cad], ['Est. profit today (CAD)', sb.est_profit_today_cad],
+      ['Products live', sb.products_live], ['Videos ready', sb.videos_ready], ['Agent runs today', sb.agent_runs_today]];
+    $('cctiles').innerHTML = tiles.map(([k, v]) => '<div class="tile' + (v === null || v === undefined ? ' na' : '') + '"><b>' + (v === null || v === undefined ? 'not connected yet' : esc(v)) + '</b><span>' + esc(k) + '</span></div>').join('');
+    const p = d.pending || [];
+    $('ccpending').innerHTML = p.length ? p.map(x => '<div class="appr"><div class="t">' + esc(x.text) + '</div><div class="r">' + esc(x.at) + ' · Approve / Decline on your Telegram</div></div>').join('')
+      : '<p class="empty">Nothing waiting for you.</p>';
+    $('cclog').innerHTML = (d.log || []).map(x => '<div class="row"><span class="w">' + esc(x.at) + '<br>' + esc(x.who) + '</span><span>' + esc(x.text) + '</span></div>').join('') || '<p class="empty">No activity yet.</p>';
+    $('ccconn').innerHTML = (d.connections || []).map(c => '<div class="conn"><span>' + (c.ok ? '<span class="ok">●</span> ' : '<span class="bad">○</span> ') + esc(c.name) + '</span><span class="' + (c.ok ? 'ok' : 'bad') + '">' + esc(c.note) + '</span></div>').join('');
+  }
+  async function ccLoad() {
+    try { const r = await fetch('api/status', { cache: 'no-store' }); if (!r.ok) throw new Error('status ' + r.status); ccRender(await r.json()); }
+    catch (e) { $('ccgen').textContent = 'could not load status (' + e.message + '): is "JARVIS Status v1" published?'; }
+    if (!wfLoaded) { wfLoaded = true; try {
+      const list = await (await fetch('workflows/index.json', { cache: 'no-store' })).json();
+      $('ccwf').innerHTML = list.map(t => '<div style="margin-top:6px;color:var(--core);font-size:11px;letter-spacing:.2em;text-transform:uppercase">' + esc(t.team) + '</div>' +
+        t.files.map(f => '<details data-f="' + esc(f.file) + '"><summary>' + esc(f.title) + '</summary><pre>loading…</pre></details>').join('')).join('');
+      $('ccwf').querySelectorAll('details').forEach(dt => dt.addEventListener('toggle', async () => {
+        if (dt.open && dt.dataset.loaded !== '1') { dt.dataset.loaded = '1'; try { dt.querySelector('pre').textContent = await (await fetch('workflows/' + dt.dataset.f)).text(); } catch { dt.querySelector('pre').textContent = 'could not load'; } }
+      }));
+    } catch { $('ccwf').innerHTML = '<p class="empty">Workflow descriptions not installed.</p>'; } }
+  }
+  $('ccopen').onclick = () => { $('cc').classList.add('open'); ccLoad(); clearInterval(ccTimer); ccTimer = setInterval(ccLoad, 60000); };
+  $('ccclose').onclick = () => { $('cc').classList.remove('open'); clearInterval(ccTimer); };
 
   // hold-to-talk: space bar, TALK button, or the core
   const typing = () => document.activeElement === $('text');

@@ -704,3 +704,52 @@ lnk(shc, "Any late?", "Send late alert", 0); lnk(shc, "Any late?", "Late memory 
 (here.parent / "jarvis-shop-v1.json").write_text(json.dumps({"name": "JARVIS Shop v1 (Rangéo orders)", "nodes": sh, "connections": shc,
   "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
 print("wrote jarvis-shop-v1.json")
+
+# ---------------------------------------------------------------------------
+# Status v1: data for the command center on the JARVIS screen (GET /api/status via Caddy).
+stn = [
+  node("c0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -260], {"width": 1100, "height": 190, "content":
+      "## JARVIS Status v1 - command center data for the JARVIS screen\n"
+      "Real data only: n8n workflows and their runs (n8n API) + JARVIS memory. Teams, scoreboard, items waiting for your yes, agent log, connections.\n"
+      "Credentials: *Webhook* -> **JARVIS screen key**; both n8n API nodes -> Header Auth **n8n API** (Name X-N8N-API-KEY, Value = key from n8n Settings -> n8n API). Save, then Publish. Never click Execute here."}),
+  node("c1", "Webhook (screen status)", "n8n-nodes-base.webhook", 2, [0, 0],
+       {"httpMethod": "GET", "path": "jarvis-status", "authentication": "headerAuth", "responseMode": "responseNode", "options": {}}, webhookId="534cc13e-77b1-48fa-86d6-c8338579a18a"),
+  node("c2", "n8n workflows", "n8n-nodes-base.httpRequest", 4.2, [220, 0], {
+       "method": "GET", "url": "http://localhost:5678/api/v1/workflows?limit=100",
+       "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth", "options": {"timeout": 15000}},
+       onError="continueRegularOutput", alwaysOutputData=True),
+  node("c3", "n8n executions", "n8n-nodes-base.httpRequest", 4.2, [440, 0], {
+       "method": "GET", "url": "http://localhost:5678/api/v1/executions?limit=100",
+       "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth", "options": {"timeout": 15000}},
+       onError="continueRegularOutput", alwaysOutputData=True),
+  node("c4", "Read memory", "n8n-nodes-base.dataTable", 1.1, [660, 0], {
+       "resource": "row", "operation": "get", "dataTableId": MEMORY_TABLE,
+       "limit": 40, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+       alwaysOutputData=True, onError="continueRegularOutput"),
+  node("c5", "Build status", "n8n-nodes-base.code", 2, [880, 0], {"jsCode": (here / "status" / "1-status.js").read_text()}),
+  node("c6", "Answer the screen", "n8n-nodes-base.respondToWebhook", 1.1, [1100, 0],
+       {"respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": {}}),
+]
+stc = {}
+for a, b in (("Webhook (screen status)", "n8n workflows"), ("n8n workflows", "n8n executions"), ("n8n executions", "Read memory"), ("Read memory", "Build status"), ("Build status", "Answer the screen")):
+    lnk(stc, a, b)
+(here.parent / "jarvis-status-v1.json").write_text(json.dumps({"name": "JARVIS Status v1 (command center)", "nodes": stn, "connections": stc,
+  "settings": {"executionOrder": "v1", "saveDataSuccessExecution": "none", "saveManualExecutions": False}, "pinData": {}}, indent=2) + "\n")
+print("wrote jarvis-status-v1.json")
+
+# ---------------------------------------------------------------------------
+# Copy docs/workflows/*.md to the screen (infra/server/ui/workflows) with an index for the command center.
+import shutil
+DOCS = here.parent.parent / "docs" / "workflows"
+UIW = here.parent.parent / "infra" / "server" / "ui" / "workflows"
+UIW.mkdir(parents=True, exist_ok=True)
+TEAM_OF = {"jarvis-": "JARVIS (CEO)", "research": "Product research", "shop": "Analysis / store", "not-built": "Not built yet"}
+groups = {}
+for f in sorted(DOCS.glob("*.md")):
+    shutil.copy(f, UIW / f.name)
+    team = next((v for k, v in TEAM_OF.items() if f.name.startswith(k)), "Other")
+    title = f.read_text().splitlines()[0].lstrip("# ").strip()
+    groups.setdefault(team, []).append({"file": f.name, "title": title})
+order = ["JARVIS (CEO)", "Product research", "Analysis / store", "Not built yet", "Other"]
+(UIW / "index.json").write_text(json.dumps([{"team": t, "files": groups[t]} for t in order if t in groups], indent=1) + "\n")
+print("wrote ui/workflows (", sum(len(v) for v in groups.values()), "files )")

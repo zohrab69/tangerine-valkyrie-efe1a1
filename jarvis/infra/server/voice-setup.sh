@@ -12,6 +12,7 @@ APP=/opt/jarvis
 echo "==> Screen files"
 mkdir -p "$APP/jarvis-ui"
 cp ui/index.html "$APP/jarvis-ui/index.html"
+rm -rf "$APP/jarvis-ui/workflows" && cp -r ui/workflows "$APP/jarvis-ui/workflows"
 
 echo "==> JARVIS voice (Piper, free and offline). First time: builds for a few minutes"
 rm -rf "$APP/tts" && cp -r tts "$APP/tts"

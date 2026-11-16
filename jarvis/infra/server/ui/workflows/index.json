@@ -1,0 +1,54 @@
+[
+ {
+  "team": "JARVIS (CEO)",
+  "files": [
+   {
+    "file": "jarvis-alerts.md",
+    "title": "Error alerts and health check (Alerts v1)"
+   },
+   {
+    "file": "jarvis-briefing.md",
+    "title": "Morning briefing (Briefing v1)"
+   },
+   {
+    "file": "jarvis-events-status.md",
+    "title": "Screen alerts and command center (Events v1, Status v1)"
+   },
+   {
+    "file": "jarvis-telegram.md",
+    "title": "JARVIS on Telegram (Telegram v5)"
+   },
+   {
+    "file": "jarvis-voice.md",
+    "title": "JARVIS screen voice (Voice v1)"
+   }
+  ]
+ },
+ {
+  "team": "Product research",
+  "files": [
+   {
+    "file": "research.md",
+    "title": "Product research + market check (Research v1)"
+   }
+  ]
+ },
+ {
+  "team": "Analysis / store",
+  "files": [
+   {
+    "file": "shop.md",
+    "title": "Rang\u00e9o store manager (Shop v1)"
+   }
+  ]
+ },
+ {
+  "team": "Not built yet",
+  "files": [
+   {
+    "file": "not-built.md",
+    "title": "Teams not built yet"
+   }
+  ]
+ }
+]

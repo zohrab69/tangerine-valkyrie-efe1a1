@@ -41,6 +41,13 @@ $JARVIS_HOST {
       header_up X-Jarvis-Key $VOICE_SECRET
     }
   }
+  handle /api/status {
+    rewrite * /webhook/jarvis-status
+    reverse_proxy n8n:5678 {
+      header_up -Authorization
+      header_up X-Jarvis-Key $VOICE_SECRET
+    }
+  }
   handle /api/ask {
     rewrite * /webhook/jarvis-voice
     reverse_proxy n8n:5678 {
