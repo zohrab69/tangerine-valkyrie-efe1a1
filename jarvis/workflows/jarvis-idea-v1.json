@@ -13,7 +13,7 @@
       "parameters": {
         "width": 2200,
         "height": 300,
-        "content": "## JARVIS Idea v1 - check the owner's own product idea, then list it on Shopify after approval\nCalled by **JARVIS Brain** (a photo, link or \"check <product>\" on Telegram, or the agent's check_product_idea tool) at `/webhook/jarvis-idea`.\nSteps: what is it (free AI, sees photos) → your rules (no batteries/chargers, no beauty, kids, food, medical; certification flags) → best 3 CJ suppliers (Canada/US warehouses first) with shipping to Canada → market: Google Shopping Canada (incl. Amazon.ca prices when listed) and Google Trends Canada (2 SerpApi searches, cached 10 days) → verdict, price, fees, profit, marketing and Amazon FBA estimates, risks → report on Telegram with **Approve / Decline** (72 h).\n**On Approve:** product created on Shopify (title FR, description FR+EN, CJ photos, price, matching collection, CJ SKU), published to the Online Store, live link sent; then the video team renders 3 short videos (server voice service) and sends them with captions and hashtags. You connect the product in the CJ app (1 min). Amazon: prepared only once your seller account + SP-API are connected, with a separate approval before buying stock. TikTok Shop has no official data: not checked.\n**Credentials:** *Webhook*: **JARVIS screen key**; *CJ get token*: **CJ API key**; SerpApi nodes: **SerpApi**; OmniRoute nodes: **OmniRoute**; Shopify nodes: **Shopify Access Token** (custom app scopes write_products, read_publications, write_publications); Telegram nodes: **JARVIS Telegram**."
+        "content": "## JARVIS Idea v1 - check the owner's own product idea, then list it on Shopify after approval\nCalled by **JARVIS Brain** (a photo, link or \"check <product>\" on Telegram, or the agent's check_product_idea tool) at `/webhook/jarvis-idea`.\nSteps: what is it (free AI, sees photos) → your rules (no batteries/chargers, no beauty, kids, food, medical; certification flags) → best 3 CJ suppliers (Canada/US warehouses first) with shipping to Canada → market: Google Shopping Canada (incl. Amazon.ca prices when listed) and Google Trends Canada (2 SerpApi searches, cached 10 days) → verdict, price, fees, profit, marketing and Amazon FBA estimates, risks → report on Telegram with **Approve / Decline** (72 h).\n**On Approve:** product created on Shopify (title FR, description FR+EN, CJ photos, price, matching collection, CJ SKU), published to the Online Store, live link sent; then the video team renders 3 short videos (server voice service) and sends them with captions and hashtags. You connect the product in the CJ app (1 min). Amazon: prepared only once your seller account + SP-API are connected, with a separate approval before buying stock. TikTok Shop has no official data: not checked.\n**Credentials:** *Webhook*: **JARVIS screen key**; *CJ get token*: **CJ API key**; SerpApi nodes: **SerpApi**; OmniRoute nodes: **OmniRoute**; *Shopify token*: Custom Auth **Rangéo Shopify app** (Dev Dashboard app: client ID + secret, scopes read_orders, read_products, write_products, read_publications, write_publications); Telegram nodes: **JARVIS Telegram**."
       }
     },
     {
@@ -1056,6 +1056,30 @@
       "alwaysOutputData": true
     },
     {
+      "id": "i60",
+      "name": "Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7810,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
       "id": "i42",
       "name": "Shopify: collections + channels",
       "type": "n8n-nodes-base.httpRequest",
@@ -1067,8 +1091,15 @@
       "parameters": {
         "method": "POST",
         "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ query: '{ collections(first: 50) { nodes { id title } } publications(first: 20) { nodes { id name } } }' }) }}",
@@ -1104,8 +1135,15 @@
       "parameters": {
         "method": "POST",
         "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.gql) }}",
@@ -1162,8 +1200,15 @@
       "parameters": {
         "method": "POST",
         "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Shopify token').first().json.access_token }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ query: 'mutation p($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { field message } } }', variables: { id: $('Shopify: create product').first().json.data.productSet.product.id, input: [{ publicationId: $('Product for Shopify').first().json.publication_id }] } }) }}",
@@ -1984,6 +2029,17 @@
       ]
     },
     "CJ product photos": {
+      "main": [
+        [
+          {
+            "node": "Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify token": {
       "main": [
         [
           {

@@ -39,10 +39,12 @@ and AI services, plus offline unit tests. None has run on the server with real k
   unhealthy/stopped containers and a frozen n8n), nightly backup now also exports workflows as JSON and, after `offsite-setup.sh`, sends the backup
   **encrypted** (AES-256, key kept by the owner) to the owner's Telegram as the off-server copy. Outside watchdog: UptimeRobot on `https://n8n.<ip>.sslip.io/healthz/readiness`
 - [~] Command center follows the new workflows (Brain, Idea, Research v2, Alerts v2) and the new memory kinds (idea, listing)
-- [ ] Owner: SerpApi key (free) -> credential **SerpApi** (Query Auth, name `api_key`)
-- [ ] Owner: Shopify custom app with scopes `read_orders`, `write_products`, `read_publications`, `write_publications` -> credential **Shopify Access Token**
-- [ ] Owner: OpenAI-type credential **OmniRoute (OpenAI format)** (OmniRoute API key, Base URL `http://omniroute:20128/v1`) for the agent
-- [ ] Owner: deploy (scp + `voice-setup.sh` for the video service, `ops-247.sh`, `offsite-setup.sh`), import Research v2, Brain v1, Idea v1, Briefing v2,
+- [x] Owner 2026-11-16: SerpApi key -> credential **SerpApi**; OpenAI-format credential **OmniRoute (OpenAI format)**; server steps 1-4 done (voice/video rebuild, ops-247, encrypted Telegram backups, UptimeRobot monitor up)
+- [~] **Shopify without a permanent key** (Shopify stopped creating admin custom apps on 2026-01-01; new apps live in the Dev Dashboard): JARVIS gets a 24 h token by
+  client credentials (Custom Auth credential **Rangéo Shopify app** = client ID + secret). Used by Idea v1, Alerts v2 and the new **Shop v2** (`jarvis-shop-v2.json`,
+  replaces Shop v1: new orders checked every 10 min with GraphQL instead of a webhook, daily late-order check). Tested against a simulated Shopify
+- [ ] Owner: Dev Dashboard app `JARVIS` (scopes `read_orders`, `read_products`, `write_products`, `read_publications`, `write_publications`), installed on rangeo-ca -> credential **Rangéo Shopify app**
+- [ ] Owner: import Research v2, Brain v1, Idea v1, Briefing v2,
   Alerts v2; unpublish Research v1, Telegram v5, Voice v1, Briefing v1, Alerts v1; set every workflow's Error workflow to Alerts v2; UptimeRobot monitor
 - [ ] Real-model test of the agent (the two test questions) and of one idea check end to end; then pick 2-3 Black Friday products (US/CA warehouse)
 - [ ] Later: Amazon SP-API (listing + FBA stock order with its own approval), Keepa only when Amazon starts, auto-posting when platform APIs are approved

@@ -13,7 +13,7 @@
       "parameters": {
         "width": 1300,
         "height": 210,
-        "content": "## JARVIS Alerts v2 - tells you on Telegram when something breaks or a key stops working\n**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v2*). Same problem repeated within 60 min = one alert.\n**Bottom:** every day 9:07 and 10:40 (Toronto): checks the free AI, the voice service, the SerpApi and Shopify keys (alarm when a key that worked stops working, or few free searches left) and that the daily 10:00 research went out. Silent when all is fine.\nCredentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*, **SerpApi** in *Check SerpApi key*, **Shopify Access Token** in *Check Shopify key*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."
+        "content": "## JARVIS Alerts v2 - tells you on Telegram when something breaks or a key stops working\n**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v2*). Same problem repeated within 60 min = one alert.\n**Bottom:** every day 9:07 and 10:40 (Toronto): checks the free AI, the voice service, the SerpApi and Shopify keys (alarm when a key that worked stops working, or few free searches left) and that the daily 10:00 research went out. Silent when all is fine.\nCredentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*, **SerpApi** in *Check SerpApi key*, Custom Auth **Rang\u00e9o Shopify app** in *Shopify token*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."
       }
     },
     {
@@ -180,6 +180,30 @@
       "alwaysOutputData": true
     },
     {
+      "id": "h12",
+      "name": "Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        420
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
       "id": "h11",
       "name": "Check Shopify key",
       "type": "n8n-nodes-base.httpRequest",
@@ -191,8 +215,15 @@
       "parameters": {
         "method": "POST",
         "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $('Shopify token').first().json.access_token || 'none' }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ query: '{ shop { name } }' }) }}",
@@ -486,6 +517,17 @@
       ]
     },
     "Check SerpApi key": {
+      "main": [
+        [
+          {
+            "node": "Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify token": {
       "main": [
         [
           {

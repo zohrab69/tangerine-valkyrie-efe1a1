@@ -49,6 +49,14 @@ def call_hook(id_, name, pos, path, body_expr, timeout=30000, **extra):
         "method": "POST", "url": HOOK + path, "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
         "sendBody": True, "specifyBody": "json", "jsonBody": body_expr, "options": {"timeout": timeout}},
         onError="continueRegularOutput", alwaysOutputData=True, **extra)
+SHOP_TOKEN_URL = SHOP + "/admin/oauth/access_token"
+def shop_token(id_, name, pos, **extra):
+    """Shopify token from the Dev Dashboard app (client credentials grant; Custom Auth credential 'Rangéo Shopify app':
+    {"body": {"grant_type": "client_credentials", "client_id": "...", "client_secret": "..."}})."""
+    return node(id_, name, "n8n-nodes-base.httpRequest", 4.2, pos, {
+        "method": "POST", "url": SHOP_TOKEN_URL, "authentication": "genericCredentialType", "genericAuthType": "httpCustomAuth",
+        "sendBody": True, "specifyBody": "json", "jsonBody": "={}", "options": {"timeout": 30000}},
+        onError="continueRegularOutput", alwaysOutputData=True, **extra)
 def save(name, wf_name, nodes, conns, extra_settings=None):
     settings = {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}
     settings.update(extra_settings or {})
@@ -233,9 +241,10 @@ def omni(id_, name, pos, body="={{ JSON.stringify($json.ai_body) }}"):
         "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
         "sendBody": True, "specifyBody": "json", "jsonBody": body, "options": {"timeout": 90000}},
         onError="continueRegularOutput", alwaysOutputData=True)
-def shopify_gql(id_, name, pos, body):
+def shopify_gql(id_, name, pos, body, token="={{ $('Shopify token').first().json.access_token }}"):
     return node(id_, name, "n8n-nodes-base.httpRequest", 4.2, pos, {
-        "method": "POST", "url": SHOPIFY_API, "authentication": "predefinedCredentialType", "nodeCredentialType": "shopifyAccessTokenApi",
+        "method": "POST", "url": SHOPIFY_API, "sendHeaders": True,
+        "headerParameters": {"parameters": [{"name": "X-Shopify-Access-Token", "value": token}]},
         "sendBody": True, "specifyBody": "json", "jsonBody": body, "options": {"timeout": 60000}},
         onError="continueRegularOutput", alwaysOutputData=True)
 def serp(id_, name, pos, params):
@@ -253,7 +262,7 @@ idn = [
     "report on Telegram with **Approve / Decline** (72 h).\n"
     "**On Approve:** product created on Shopify (title FR, description FR+EN, CJ photos, price, matching collection, CJ SKU), published to the Online Store, live link sent; then the video team renders 3 short videos (server voice service) and sends them with captions and hashtags. "
     "You connect the product in the CJ app (1 min). Amazon: prepared only once your seller account + SP-API are connected, with a separate approval before buying stock. TikTok Shop has no official data: not checked.\n"
-    "**Credentials:** *Webhook*: **JARVIS screen key**; *CJ get token*: **CJ API key**; SerpApi nodes: **SerpApi**; OmniRoute nodes: **OmniRoute**; Shopify nodes: **Shopify Access Token** (custom app scopes write_products, read_publications, write_publications); Telegram nodes: **JARVIS Telegram**."}),
+    "**Credentials:** *Webhook*: **JARVIS screen key**; *CJ get token*: **CJ API key**; SerpApi nodes: **SerpApi**; OmniRoute nodes: **OmniRoute**; *Shopify token*: Custom Auth **Rangéo Shopify app** (Dev Dashboard app: client ID + secret, scopes read_orders, read_products, write_products, read_publications, write_publications); Telegram nodes: **JARVIS Telegram**."}),
   node("i1", "Webhook (product idea)", "n8n-nodes-base.webhook", 2, [0, 0],
        {"httpMethod": "POST", "path": "jarvis-idea", "authentication": "headerAuth", "responseMode": "responseNode", "options": {}},
        webhookId="b7e3d1a9-4c2f-4e6b-8a0d-1f5c9e3b7d26"),
@@ -325,6 +334,7 @@ idn = [
        "queryParameters": {"parameters": [{"name": "pid", "value": "={{ $('Report').first().json.best.pid }}"}]},
        "sendHeaders": True, "headerParameters": {"parameters": [{"name": "CJ-Access-Token", "value": "={{ $getWorkflowStaticData('global').cjToken ? $getWorkflowStaticData('global').cjToken.value : '' }}"}]},
        "options": {"timeout": 30000}}, onError="continueRegularOutput", alwaysOutputData=True),
+  shop_token("i60", "Shopify token", [7810, -200]),
   shopify_gql("i42", "Shopify: collections + channels", [7920, -60],
        "={{ JSON.stringify({ query: '{ collections(first: 50) { nodes { id title } } publications(first: 20) { nodes { id name } } }' }) }}"),
   cnode("i43", "Product for Shopify", [8140, -60], "idea/13-shopify-input.js"),
@@ -370,10 +380,52 @@ for a, b, o in [("Webhook (product idea)", "Idea input", 0), ("Idea input", "Ans
                 ("Report", "Memory row", 0), ("Memory row", "Save idea to memory", 0), ("Save idea to memory", "Send photo", 0), ("Send photo", "Send report", 0),
                 ("Send report", "Offer to list?", 0), ("Offer to list?", "Ask owner: list on Shopify?", 0), ("Ask owner: list on Shopify?", "Decision", 0),
                 ("Decision", "Save decision", 0), ("Decision", "Tell owner: decision", 0), ("Decision", "Approved?", 0),
-                ("Approved?", "CJ product photos", 0), ("CJ product photos", "Shopify: collections + channels", 0), ("Shopify: collections + channels", "Product for Shopify", 0),
+                ("Approved?", "CJ product photos", 0), ("CJ product photos", "Shopify token", 0), ("Shopify token", "Shopify: collections + channels", 0), ("Shopify: collections + channels", "Product for Shopify", 0),
                 ("Product for Shopify", "Shopify: create product", 0), ("Shopify: create product", "Created + channel known?", 0),
                 ("Created + channel known?", "Publish to Online Store", 0), ("Created + channel known?", "Listing result", 1), ("Publish to Online Store", "Listing result", 0),
                 ("Listing result", "Send live link", 0), ("Listing result", "Save listing to memory", 0), ("Send live link", "Listed?", 0),
                 ("Listed?", "Video scripts", 0), ("Video scripts", "Send scripts", 0), ("Video scripts", "Make video (server)", 0), ("Make video (server)", "Send video", 0)]:
     link(idc, a, b, o)
 save("jarvis-idea-v1.json", "JARVIS Idea v1 (check my product idea)", idn, idc)
+
+
+# ===========================================================================
+# SHOP v2: Rangéo store manager without a permanent Shopify key (Shopify's Dev Dashboard apps since 2026):
+# token by client credentials, new orders every 10 minutes (GraphQL), daily late-order check.
+def shc(f): return code("shop/" + f)
+spn = [
+  node("q0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -300], {"width": 1500, "height": 220, "content":
+    "## JARVIS Shop v2 - Rangéo store manager\n"
+    "**Every 10 minutes:** new Shopify orders -> Telegram alert (items, total, estimated profit, city) + memory (screen and briefing see it).\n"
+    "**Every day 8:45:** paid orders not shipped after 4 days -> one alert. Silent when all is fine.\n"
+    "Shopify key: Custom Auth credential **Rangéo Shopify app** in *Shopify token* (Dev Dashboard app client ID + secret; JARVIS gets a fresh 24 h token itself). "
+    "**JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Replaces Shop v1."}),
+  node("q1", "Every 10 minutes", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0], {"rule": {"interval": [{"field": "minutes", "minutesInterval": 10}]}}),
+  node("q2", "New orders mode", "n8n-nodes-base.code", 2, [200, 0], {"jsCode": "return [{ json: { mode: 'new' } }];"}),
+  node("q3", "Every day 8:45", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 300], {"rule": {"interval": [{"field": "cronExpression", "expression": "45 8 * * *"}]}}),
+  node("q4", "Check now", "n8n-nodes-base.manualTrigger", 1, [0, 460], {}),
+  node("q5", "Late orders mode", "n8n-nodes-base.code", 2, [200, 380], {"jsCode": "return [{ json: { mode: 'late' } }];"}),
+  cnode("q6", "Which check?", [420, 150], "shop/0-which.js"),
+  ifnode("q7", "Need a token?", [640, 150], "={{ $json.need_token === true }}"),
+  shop_token("q8", "Shopify token", [860, 40]),
+  cnode("q9", "Token", [1080, 150], "shop/0-token.js"),
+  shopify_gql("q10", "Shopify orders", [1300, 150], "={{ JSON.stringify($json.gql) }}", token="={{ $json.shop_token }}"),
+  cnode("q11", "Orders", [1520, 150], "shop/0-orders-from-graphql.js"),
+  ifnode("q12", "New-order check?", [1740, 150], "={{ $('Which check?').first().json.mode === 'new' }}"),
+  node("q13", "Format order", "n8n-nodes-base.code", 2, [1960, 40], {"jsCode": code("shop/1-new-order.js")}),
+  tg_send("q14", "Send order alert", [2180, -40], "={{ $json.text }}", html=True),
+  mem_insert("q15", "Save order to memory", [2180, 120]),
+  node("q16", "Late orders", "n8n-nodes-base.code", 2, [1960, 300], {"jsCode": code("shop/2-stuck.js")}),
+  ifnode("q17", "Any late?", [2180, 300], "={{ $json.send === true }}"),
+  tg_send("q18", "Send late alert", [2400, 220], "={{ $json.text }}", html=True),
+  mem_insert("q19", "Save late to memory", [2400, 380]),
+]
+spc = {}
+for a, b, o in [("Every 10 minutes", "New orders mode", 0), ("Every day 8:45", "Late orders mode", 0), ("Check now", "Late orders mode", 0),
+                ("New orders mode", "Which check?", 0), ("Late orders mode", "Which check?", 0), ("Which check?", "Need a token?", 0),
+                ("Need a token?", "Shopify token", 0), ("Need a token?", "Token", 1), ("Shopify token", "Token", 0), ("Token", "Shopify orders", 0),
+                ("Shopify orders", "Orders", 0), ("Orders", "New-order check?", 0), ("New-order check?", "Format order", 0), ("New-order check?", "Late orders", 1),
+                ("Format order", "Send order alert", 0), ("Format order", "Save order to memory", 0),
+                ("Late orders", "Any late?", 0), ("Any late?", "Send late alert", 0), ("Any late?", "Save late to memory", 0)]:
+    link(spc, a, b, o)
+save("jarvis-shop-v2.json", "JARVIS Shop v2 (Rangéo orders)", spn, spc)

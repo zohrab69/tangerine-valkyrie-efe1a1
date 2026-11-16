@@ -598,7 +598,7 @@ al = [
       "## JARVIS Alerts v2 - tells you on Telegram when something breaks or a key stops working\n"
       "**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v2*). Same problem repeated within 60 min = one alert.\n"
       "**Bottom:** every day 9:07 and 10:40 (Toronto): checks the free AI, the voice service, the SerpApi and Shopify keys (alarm when a key that worked stops working, or few free searches left) and that the daily 10:00 research went out. Silent when all is fine.\n"
-      "Credentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*, **SerpApi** in *Check SerpApi key*, **Shopify Access Token** in *Check Shopify key*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."}),
+      "Credentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*, **SerpApi** in *Check SerpApi key*, Custom Auth **Rangéo Shopify app** in *Shopify token*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."}),
   node("x1", "When a workflow fails", "n8n-nodes-base.errorTrigger", 1, [0, 0], {}),
   node("x2", "Format error alert", "n8n-nodes-base.code", 2, [220, 0], {"jsCode": acode("1-format-error.js")}),
   ifnode("x3", "New problem?", [440, 0], "={{ $json.send === true }}"),
@@ -613,9 +613,13 @@ al = [
   node("h10", "Check SerpApi key", "n8n-nodes-base.httpRequest", 4.2, [560, 300], {
        "method": "GET", "url": "https://serpapi.com/account.json", "authentication": "genericCredentialType", "genericAuthType": "httpQueryAuth",
        "options": {"timeout": 20000}}, onError="continueRegularOutput", alwaysOutputData=True),
+  node("h12", "Shopify token", "n8n-nodes-base.httpRequest", 4.2, [600, 420], {
+       "method": "POST", "url": "https://rangeo-ca.myshopify.com/admin/oauth/access_token",
+       "authentication": "genericCredentialType", "genericAuthType": "httpCustomAuth",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={}", "options": {"timeout": 20000}}, onError="continueRegularOutput", alwaysOutputData=True),
   node("h11", "Check Shopify key", "n8n-nodes-base.httpRequest", 4.2, [620, 360], {
-       "method": "POST", "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
-       "authentication": "predefinedCredentialType", "nodeCredentialType": "shopifyAccessTokenApi",
+       "method": "POST", "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json", "sendHeaders": True,
+       "headerParameters": {"parameters": [{"name": "X-Shopify-Access-Token", "value": "={{ $('Shopify token').first().json.access_token || 'none' }}"}]},
        "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify({ query: '{ shop { name } }' }) }}",
        "options": {"timeout": 20000}}, onError="continueRegularOutput", alwaysOutputData=True),
   node("h0", "Run health check now", "n8n-nodes-base.manualTrigger", 1, [0, 580], {}),
@@ -647,7 +651,7 @@ lnk(ac, "New problem?", "Send error alert", 0); lnk(ac, "New problem?", "Error m
 lnk(ac, "Error memory row", "Save error to memory")
 for t in ("Every day 9:07 + 10:40", "Run health check now"): lnk(ac, t, "Check AI (free combo)")
 lnk(ac, "Check AI (free combo)", "Check voice service"); lnk(ac, "Check voice service", "Check SerpApi key")
-lnk(ac, "Check SerpApi key", "Check Shopify key"); lnk(ac, "Check Shopify key", "Read memory"); lnk(ac, "Read memory", "Evaluate")
+lnk(ac, "Check SerpApi key", "Shopify token"); lnk(ac, "Shopify token", "Check Shopify key"); lnk(ac, "Check Shopify key", "Read memory"); lnk(ac, "Read memory", "Evaluate")
 lnk(ac, "Evaluate", "Any problem?"); lnk(ac, "Any problem?", "Send health alert", 0); lnk(ac, "Any problem?", "Health memory row", 0)
 lnk(ac, "Health memory row", "Save health to memory")
 (here.parent / "jarvis-alerts-v2.json").write_text(json.dumps({"name": "JARVIS Alerts v2 (errors + health + keys)", "nodes": al, "connections": ac,
@@ -744,9 +748,8 @@ lnk(shc, "New Shopify order", "Format order"); lnk(shc, "Format order", "Send or
 for t in ("Every day 8:45", "Check now"): lnk(shc, t, "Open unshipped orders")
 lnk(shc, "Open unshipped orders", "Late orders"); lnk(shc, "Late orders", "Any late?")
 lnk(shc, "Any late?", "Send late alert", 0); lnk(shc, "Any late?", "Late memory row", 0); lnk(shc, "Late memory row", "Save late to memory")
-(here.parent / "jarvis-shop-v1.json").write_text(json.dumps({"name": "JARVIS Shop v1 (Rangéo orders)", "nodes": sh, "connections": shc,
-  "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
-print("wrote jarvis-shop-v1.json")
+# Shop v1 (permanent Shopify key) is replaced by jarvis-shop-v2.json in build_v2.py: Shopify no longer issues
+# permanent keys for new stores' apps (Dev Dashboard apps since 2026).
 
 # ---------------------------------------------------------------------------
 # Status v1: data for the command center on the JARVIS screen (GET /api/status via Caddy).

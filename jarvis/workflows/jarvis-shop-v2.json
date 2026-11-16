@@ -1,0 +1,658 @@
+{
+  "name": "JARVIS Shop v2 (Rangéo orders)",
+  "nodes": [
+    {
+      "id": "q0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -300
+      ],
+      "parameters": {
+        "width": 1500,
+        "height": 220,
+        "content": "## JARVIS Shop v2 - Rangéo store manager\n**Every 10 minutes:** new Shopify orders -> Telegram alert (items, total, estimated profit, city) + memory (screen and briefing see it).\n**Every day 8:45:** paid orders not shipped after 4 days -> one alert. Silent when all is fine.\nShopify key: Custom Auth credential **Rangéo Shopify app** in *Shopify token* (Dev Dashboard app client ID + secret; JARVIS gets a fresh 24 h token itself). **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Replaces Shop v1."
+      }
+    },
+    {
+      "id": "q1",
+      "name": "Every 10 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "q2",
+      "name": "New orders mode",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { mode: 'new' } }];"
+      }
+    },
+    {
+      "id": "q3",
+      "name": "Every day 8:45",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "q4",
+      "name": "Check now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        460
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "q5",
+      "name": "Late orders mode",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        380
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { mode: 'late' } }];"
+      }
+    },
+    {
+      "id": "q6",
+      "name": "Which check?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Which check runs: \"new\" (every 10 min: new orders) or \"late\" (daily 8:45: paid orders not shipped). Reuses the token if still valid.\nconst mode = $input.first().json.mode || 'new';\nconst t = $getWorkflowStaticData('global').shopToken;\nconst since = new Date(Date.now() - (mode === 'late' ? 30 : 3) * 864e5).toISOString().slice(0, 10);\nconst q = mode === 'late' ? `created_at:>=${since} financial_status:paid fulfillment_status:unshipped status:open` : `created_at:>=${since}`;\nreturn [{ json: { mode, need_token: !(t && t.until > Date.now()), gql: { query:\n  'query($q: String!) { orders(first: 50, sortKey: CREATED_AT, reverse: true, query: $q) { nodes { id name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus currencyCode ' +\n  'totalPriceSet { shopMoney { amount } } totalTaxSet { shopMoney { amount } } shippingAddress { city provinceCode } ' +\n  'lineItems(first: 20) { nodes { title quantity sku originalUnitPriceSet { shopMoney { amount } } } } } } }', variables: { q } } } }];\n"
+      }
+    },
+    {
+      "id": "q7",
+      "name": "Need a token?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "q7c",
+              "leftValue": "={{ $json.need_token === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "q8",
+      "name": "Shopify token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/oauth/access_token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "q9",
+      "name": "Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Shopify access token (Dev Dashboard app, client credentials): valid about 24 h, kept in workflow data.\nconst store = $getWorkflowStaticData('global');\nconst r = $input.first().json || {};\nif (r.access_token) store.shopToken = { value: r.access_token, until: Date.now() + (Number(r.expires_in) || 86399) * 1000 - 600000 };\nconst t = store.shopToken;\nreturn [{ json: { ...$('Which check?').first().json, shop_token: t && t.until > Date.now() ? t.value : null,\n                  token_error: r.access_token ? null : (r.error ? String(r.error.message || r.error_description || r.error).slice(0, 200) : null) } }];\n"
+      }
+    },
+    {
+      "id": "q10",
+      "name": "Shopify orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Shopify-Access-Token",
+              "value": "={{ $json.shop_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gql) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "q11",
+      "name": "Orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// Shopify GraphQL orders -> the simple order format used by \"Format order\" and \"Late orders\".\n// New orders = not seen before (remembered in workflow data). First run: remembers existing orders silently.\nconst r = $input.first().json || {};\nconst nodes = (((r.data || {}).orders || {}).nodes) || [];\nconst amt = m => Number((m && m.shopMoney && m.shopMoney.amount) || 0);\nconst orders = nodes.map(o => ({\n  id: o.id, name: o.name, created_at: o.createdAt, cancelled_at: o.cancelledAt,\n  financial_status: String(o.displayFinancialStatus || '').toLowerCase(),\n  fulfillment_status: /FULFILLED/.test(o.displayFulfillmentStatus || '') && o.displayFulfillmentStatus !== 'UNFULFILLED' ? (o.displayFulfillmentStatus === 'PARTIALLY_FULFILLED' ? 'partial' : 'fulfilled') : null,\n  currency: o.currencyCode || 'CAD', total_price: amt(o.totalPriceSet).toFixed(2), total_tax: amt(o.totalTaxSet).toFixed(2),\n  shipping_address: o.shippingAddress ? { city: o.shippingAddress.city, province_code: o.shippingAddress.provinceCode } : null,\n  line_items: ((o.lineItems || {}).nodes || []).map(li => ({ title: li.title, quantity: li.quantity, sku: li.sku || '', price: amt(li.originalUnitPriceSet) })),\n}));\nconst mode = $('Which check?').first().json.mode;\nif (mode === 'late') return orders.length ? orders.map(o => ({ json: o })) : [{ json: {} }];\nconst store = $getWorkflowStaticData('global');\nconst first = !store.seenOrders;\nstore.seenOrders = store.seenOrders || [];\nconst fresh = orders.filter(o => !store.seenOrders.includes(o.id));\nstore.seenOrders = [...fresh.map(o => o.id), ...store.seenOrders].slice(0, 300);\nif (first || !fresh.length) return [];\nreturn fresh.reverse().map(o => ({ json: o }));\n"
+      }
+    },
+    {
+      "id": "q12",
+      "name": "New-order check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1740,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "q12c",
+              "leftValue": "={{ $('Which check?').first().json.mode === 'new' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "q13",
+      "name": "Format order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        40
+      ],
+      "parameters": {
+        "jsCode": "// New Rangéo order (Shopify webhook orders/create) -> Telegram alert + memory row.\n// COSTS: supplier cost + shipping in USD per CJ SKU (from CJ). Add a line for each new product.\nconst COSTS = { 'CJQCNBQC00122-Black': 12.90 };\nconst USD_TO_CAD = 1.40, FEE_PCT = 0.029, FEE_FIXED = 0.30;\nfunction format(o) {\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst items = (o.line_items || []).map(li => ({ title: li.title || li.name || '?', qty: Number(li.quantity) || 1, sku: li.sku || '', price: Number(li.price) || 0 }));\nconst total = Number(o.total_price ?? o.current_total_price ?? 0);\nconst tax = Number(o.total_tax ?? 0);\nlet cost = 0, unknown = [];\nfor (const it of items) {\n  const key = Object.keys(COSTS).find(k => it.sku && (it.sku === k || it.sku.includes(k) || k.includes(it.sku)));\n  if (key) cost += COSTS[key] * USD_TO_CAD * it.qty; else unknown.push(it.title);\n}\nconst fees = total * FEE_PCT + FEE_FIXED;\nconst profit = unknown.length ? null : +(total - tax - cost - fees).toFixed(2);\nconst city = [o.shipping_address?.city, o.shipping_address?.province_code].filter(Boolean).join(', ');\nconst local = new Date(o.created_at || Date.now()).toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst text = [\n  '🛒 <b>New Rangéo order ' + esc(o.name || ('#' + (o.order_number || ''))) + '</b>',\n  ...items.map(it => '• ' + it.qty + ' × ' + esc(it.title)),\n  'Total: ' + total.toFixed(2) + ' ' + esc(o.currency || 'CAD') + (tax ? ' (tax ' + tax.toFixed(2) + ')' : ''),\n  profit !== null ? 'Est. profit: ~' + profit + ' CAD (before ads)' : 'Est. profit: unknown (add the cost of ' + esc(unknown.join(', ')) + ' to COSTS)',\n  city ? 'Ship to: ' + esc(city) : '',\n  'Payment: ' + esc(o.financial_status || '?') + ' · ' + esc(local),\n  'CJ will pay and ship it automatically at the next time point (9:00 / 17:00).',\n].filter(Boolean).join('\\n');\nconst summary = `New Rangéo order ${o.name || ''} (${local}): ${items.map(i => i.qty + 'x ' + i.title).join(', ')}; total ${total.toFixed(2)} ${o.currency || 'CAD'}` + (profit !== null ? `; est. profit ~${profit} CAD` : '');\nreturn { text, kind: 'order', summary: summary.slice(0, 1500) };\n}\n// One alert per new order (Shop v2 can find several at once).\nreturn $input.all().map(i => ({ json: format(i.json || {}) }));\n"
+      }
+    },
+    {
+      "id": "q14",
+      "name": "Send order alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2180,
+        -40
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "q15",
+      "name": "Save order to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2180,
+        120
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "q16",
+      "name": "Late orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Daily check: paid Rangéo orders still not shipped after 4 days -> one Telegram alert (silent otherwise).\nconst DAYS = 4;\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst orders = $input.all().map(i => i.json || {}).filter(o => o.id && o.created_at && !o.cancelled_at);\nconst late = orders.filter(o => (Date.now() - new Date(o.created_at)) / 86400e3 > DAYS && (o.fulfillment_status === null || o.fulfillment_status === undefined || o.fulfillment_status === 'partial'));\nconst text = '⚠️ <b>Rangéo: ' + late.length + ' order(s) not shipped after ' + DAYS + ' days</b>\\n' +\n  late.slice(0, 10).map(o => '• ' + esc(o.name) + ' from ' + new Date(o.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }) + ', ' + esc(o.total_price) + ' ' + esc(o.currency)).join('\\n') +\n  '\\nCheck CJ → Orders: unpaid, out of stock, or address problem? Customers may ask for refunds if it waits too long.';\nreturn [{ json: { send: late.length > 0, text, kind: 'error', summary: `Rangéo: ${late.length} order(s) not shipped after ${DAYS} days: ${late.map(o => o.name).join(', ')}` } }];\n"
+      }
+    },
+    {
+      "id": "q17",
+      "name": "Any late?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2180,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "q17c",
+              "leftValue": "={{ $json.send === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "q18",
+      "name": "Send late alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        220
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "q19",
+      "name": "Save late to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        380
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every 10 minutes": {
+      "main": [
+        [
+          {
+            "node": "New orders mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day 8:45": {
+      "main": [
+        [
+          {
+            "node": "Late orders mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check now": {
+      "main": [
+        [
+          {
+            "node": "Late orders mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New orders mode": {
+      "main": [
+        [
+          {
+            "node": "Which check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Late orders mode": {
+      "main": [
+        [
+          {
+            "node": "Which check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which check?": {
+      "main": [
+        [
+          {
+            "node": "Need a token?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need a token?": {
+      "main": [
+        [
+          {
+            "node": "Shopify token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify token": {
+      "main": [
+        [
+          {
+            "node": "Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token": {
+      "main": [
+        [
+          {
+            "node": "Shopify orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify orders": {
+      "main": [
+        [
+          {
+            "node": "Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orders": {
+      "main": [
+        [
+          {
+            "node": "New-order check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New-order check?": {
+      "main": [
+        [
+          {
+            "node": "Format order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Late orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format order": {
+      "main": [
+        [
+          {
+            "node": "Send order alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save order to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Late orders": {
+      "main": [
+        [
+          {
+            "node": "Any late?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any late?": {
+      "main": [
+        [
+          {
+            "node": "Send late alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save late to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

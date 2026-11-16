@@ -2,7 +2,7 @@
 // COSTS: supplier cost + shipping in USD per CJ SKU (from CJ). Add a line for each new product.
 const COSTS = { 'CJQCNBQC00122-Black': 12.90 };
 const USD_TO_CAD = 1.40, FEE_PCT = 0.029, FEE_FIXED = 0.30;
-const o = $input.first().json || {};
+function format(o) {
 const esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const items = (o.line_items || []).map(li => ({ title: li.title || li.name || '?', qty: Number(li.quantity) || 1, sku: li.sku || '', price: Number(li.price) || 0 }));
 const total = Number(o.total_price ?? o.current_total_price ?? 0);
@@ -26,4 +26,7 @@ const text = [
   'CJ will pay and ship it automatically at the next time point (9:00 / 17:00).',
 ].filter(Boolean).join('\n');
 const summary = `New Rangéo order ${o.name || ''} (${local}): ${items.map(i => i.qty + 'x ' + i.title).join(', ')}; total ${total.toFixed(2)} ${o.currency || 'CAD'}` + (profit !== null ? `; est. profit ~${profit} CAD` : '');
-return [{ json: { text, kind: 'order', summary: summary.slice(0, 1500) } }];
+return { text, kind: 'order', summary: summary.slice(0, 1500) };
+}
+// One alert per new order (Shop v2 can find several at once).
+return $input.all().map(i => ({ json: format(i.json || {}) }));

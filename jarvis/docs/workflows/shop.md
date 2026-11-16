@@ -1,6 +1,6 @@
-# Rangéo store manager (Shop v1)
-Team: Analysis / store · Runs: every new Shopify order; daily 8:45
+# Rangéo store manager (Shop v2)
+Team: Analysis / store · Runs: every 10 minutes (new orders), every day 8:45 (late orders)
 
-- New order: Telegram alert with items, total, estimated profit, city; saved to memory (screen and briefing see it).
-- Daily: paid orders not shipped after 4 days -> one alert. Silent otherwise.
-- CJ pays and ships automatically through the CJ app (auto-pay + time points 9:00 / 17:00).
+- New Shopify order -> Telegram alert with items, total, estimated profit and city; saved to memory (screen and briefing see it).
+- Paid orders not shipped after 4 days -> one alert. Silent when all is fine.
+- Shopify key: a Dev Dashboard app; JARVIS gets a fresh 24-hour key himself (client ID + secret).
