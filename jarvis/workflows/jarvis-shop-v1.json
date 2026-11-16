@@ -13,7 +13,7 @@
       "parameters": {
         "width": 1250,
         "height": 210,
-        "content": "## JARVIS Shop v1 - Rang\u00e9o store manager\n**Top:** every new Shopify order -> Telegram alert (items, total, estimated profit, city) + memory (the JARVIS screen announces it, the morning briefing counts it).\n**Bottom:** every day 8:45 (Toronto) -> paid orders not shipped after 4 days -> one alert. Silent when all is fine.\nCredentials: **Shopify Access Token** (custom app, read orders) in both Shopify nodes; **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Settings -> Error workflow -> JARVIS Alerts v1."
+        "content": "## JARVIS Shop v1 - Rang\u00e9o store manager\n**Top:** every new Shopify order -> Telegram alert (items, total, estimated profit, city) + memory (the JARVIS screen announces it, the morning briefing counts it).\n**Bottom:** every day 8:45 (Toronto) -> paid orders not shipped after 4 days -> one alert. Silent when all is fine.\nCredentials: **Shopify Access Token** (custom app, read orders) in both Shopify nodes; **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Settings -> Error workflow -> JARVIS Alerts v2."
       }
     },
     {

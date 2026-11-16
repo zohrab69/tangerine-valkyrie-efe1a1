@@ -2,9 +2,9 @@
 // Anything not connected or not built is reported as such, never filled with sample numbers.
 const TZ = 'America/Toronto';
 const TEAMS = [
-  { id: 'jarvis', name: 'JARVIS (CEO)', workflows: ['JARVIS Telegram v5', 'JARVIS Voice v1', 'JARVIS Events v1', 'JARVIS Briefing v1', 'JARVIS Alerts v1', 'JARVIS Status v1'] },
-  { id: 'research', name: 'Product research', workflows: ['JARVIS Research v1'] },
-  { id: 'analysis', name: 'Analysis / store', workflows: ['JARVIS Shop v1'] },
+  { id: 'jarvis', name: 'JARVIS (CEO)', workflows: ['JARVIS Brain', 'JARVIS Events', 'JARVIS Briefing', 'JARVIS Alerts', 'JARVIS Status'] },
+  { id: 'research', name: 'Product research', workflows: ['JARVIS Research'] },
+  { id: 'analysis', name: 'Analysis / store', workflows: ['JARVIS Idea', 'JARVIS Shop'] },
   { id: 'content', name: 'Content & video', workflows: [] },
   { id: 'marketing', name: 'Marketing', workflows: [] },
   { id: 'amazon', name: 'Amazon FBA', workflows: [] },
@@ -16,13 +16,15 @@ const exRes = $('n8n executions').first().json || {};
 const apiOk = Array.isArray(wfRes.data);
 const wfs = apiOk ? wfRes.data : [];
 const exs = Array.isArray(exRes.data) ? exRes.data : [];
-const mem = $('Read memory').all().map(i => i.json || {}).filter(r => r.summary && r.createdAt)
+const mem = $('Read memory').all().map(i => i.json || {}).filter(r => r.summary && r.createdAt && r.kind !== 'research_report')
   .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 const now = Date.now(), day = d => new Date(d).toLocaleDateString('en-CA', { timeZone: TZ }), today = day(now);
 const local = d => new Date(d).toLocaleString('en-CA', { timeZone: TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 const agentOf = (prefix) => {
-  const w = wfs.find(x => String(x.name).startsWith(prefix));
+  // Several versions may be installed (e.g. Research v1 and v2): use the published one, else the newest.
+  const all = wfs.filter(x => String(x.name).startsWith(prefix + ' '));
+  const w = all.find(x => x.active) || all.sort((a, b) => String(b.name).localeCompare(String(a.name)))[0];
   if (!w) return { name: prefix.replace(/^JARVIS /, ''), status: apiOk ? 'not installed' : 'unknown' };
   const runs = exs.filter(e => String(e.workflowId) === String(w.id));
   const last = runs[0];
@@ -64,7 +66,7 @@ const pending = mem.filter(r => ((r.kind === 'approval_pending' && !later(r, 'ap
 const nameOf = id => { const w = wfs.find(x => String(x.id) === String(id)); return w ? w.name.replace(/^JARVIS /, '') : 'workflow ' + id; };
 const log = [
   ...mem.slice(0, 15).map(r => ({ at: r.createdAt, who: ({ research: 'Research', order: 'Store', sample: 'Samples', sample_pending: 'Samples', approval: 'Approvals',
-      approval_pending: 'Approvals', briefing: 'Briefing', error: 'Alerts' })[r.kind] || r.kind, text: r.summary.slice(0, 200) })),
+      approval_pending: 'Approvals', briefing: 'Briefing', error: 'Alerts', idea: 'Idea check', listing: 'Store' })[r.kind] || r.kind, text: r.summary.slice(0, 200) })),
   ...exs.filter(e => e.mode !== 'webhook' || e.status !== 'success').slice(0, 15)
     .map(e => ({ at: e.startedAt, who: nameOf(e.workflowId), text: e.status === 'success' ? 'finished' : e.status === 'waiting' ? 'waiting on you' : e.status })),
 ].filter(x => x.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 20).map(x => ({ ...x, at: local(x.at) }));
@@ -73,8 +75,8 @@ const log = [
 const lastResearch = mem.find(r => r.kind === 'research');
 const agent = n => teams.flatMap(t => t.agents).find(a => a.name.startsWith(n)) || {};
 const connections = [
-  { name: 'Telegram', ok: !!agent('Telegram').active, note: agent('Telegram').active ? 'connected' : 'workflow off' },
-  { name: 'Free AI (OmniRoute)', ok: agent('Voice').last_status !== 'error', note: 'Groq + Gemini' },
+  { name: 'Telegram', ok: !!agent('Brain').active, note: agent('Brain').active ? 'connected (JARVIS Brain)' : 'JARVIS Brain off' },
+  { name: 'Free AI (OmniRoute)', ok: agent('Brain').last_status !== 'error', note: 'free models (agent)' },
   { name: 'CJ Dropshipping', ok: agent('Research').last_status === 'success', note: agent('Research').last_run ? 'last research ' + agent('Research').last_run : 'no run yet' },
   { name: 'SerpApi (market check)', ok: !!(lastResearch && /market ~/.test(lastResearch.summary)), note: lastResearch && /market ~/.test(lastResearch.summary) ? 'connected' : 'needs key' },
   { name: 'Shopify', ok: shopConnected, note: shopConnected ? 'orders connected' : 'needs token' },

@@ -1,7 +1,7 @@
 // Gives JARVIS a shared memory: the latest entries from the n8n data table "jarvis_memory"
 // (written by other JARVIS workflows, e.g. the Monday research report). Works with an empty table.
 const task = $('__SRC__').first().json;
-const rows = $input.all().map(i => i.json || {}).filter(r => r.summary);
+const rows = $input.all().map(i => i.json || {}).filter(r => r.summary && r.kind !== 'research_report');
 // Times in the owner's time zone (Toronto/Montreal), with "x minutes ago", so JARVIS can answer "just now?" correctly.
 const TZ = 'America/Toronto';
 const local = d => new Date(d).toLocaleString('en-CA', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });

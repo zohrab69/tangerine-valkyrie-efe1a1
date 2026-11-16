@@ -1,17 +1,24 @@
 // Market check (SerpApi: Google Shopping Canada prices + Google Trends Canada, last 3 months).
-// Keeps only products people already pay well for (market price >= 2x our landed cost) and whose
-// search interest is not falling. 🔥 = rising + price gap >= 2.5x + owner targets met.
+// Fresh results come from the two SerpApi nodes; others from the 10-day cache (see Market check items).
+// Pass = market price >= 2x our landed cost and searches not falling. 🔥 = rising + 2.5x gap + owner targets.
+// Final list (max 5): passed first (🔥 first, then CA/US warehouse), then "market not checked yet"
+// (saving free searches) - products that failed the market check are dropped.
+const store = $getWorkflowStaticData('global');
 const s = $('Shortlist').first().json;
-const items = $('Market check items').all().map(i => i.json);
-const shop = $('Google Shopping (Canada)').all().map(i => i.json || {});
-const trends = $('Google Trends (Canada)').all().map(i => i.json || {});
+const metaItem = $('Market check items').first().json;
+const meta = metaItem.meta;
+let freshItems = [], shop = [], trends = [];
+if (!metaItem.none) {
+  freshItems = $('Market check items').all().map(i => i.json);
+  try { shop = $('Google Shopping (Canada)').all().map(i => i.json || {}); } catch (e) { shop = []; }
+  try { trends = $('Google Trends (Canada)').all().map(i => i.json || {}); } catch (e) { trends = []; }
+}
 const USD_TO_CAD = 1.40;
 const median = a => { const b = [...a].sort((x, y) => x - y); return b.length ? (b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : null; };
-let checked = 0;
-const enriched = s.top.map((p, i) => {
-  const sh = shop[i] || {}, tr = trends[i] || {};
-  const prices = (sh.shopping_results || []).map(r => Number(r.extracted_price)).filter(x => x > 0 && x < 1000);
-  const mp = prices.length >= 3 ? +median(prices).toFixed(2) : null;
+function analyse(sh, tr) {
+  const results = sh.shopping_results || [];
+  const prices = results.map(r => Number(r.extracted_price)).filter(x => x > 0 && x < 1000);
+  const amazon = results.filter(r => /amazon/i.test(r.source || '')).map(r => Number(r.extracted_price)).filter(x => x > 0);
   const tl = ((tr.interest_over_time || {}).timeline_data || []).map(t => Number(((t.values || [])[0] || {}).extracted_value) || 0);
   let trend = null, trend_pct = null;
   if (tl.length >= 8) {
@@ -20,21 +27,54 @@ const enriched = s.top.map((p, i) => {
     trend_pct = first > 0 ? Math.round((last - first) / first * 100) : (last > 0 ? 100 : 0);
     trend = trend_pct >= 20 ? 'rising' : trend_pct <= -20 ? 'falling' : 'flat';
   }
-  if (mp !== null || trend !== null) checked++;
-  const ratio = mp ? +(mp / p.landed_cad).toFixed(1) : null;
-  const hot = ratio !== null && ratio >= 2.5 && trend === 'rising' && p.meets_target;
-  const pass = ratio !== null && ratio >= 2 && trend !== 'falling';   // no market data = not proven, not sent
-  return { ...p, market: { query: items[i] ? items[i].q : '', median_price_cad: mp, offers: prices.length, ratio, trend, trend_pct, hot, pass,
-    note: sh.error || tr.error ? 'market data error: ' + String(sh.error || tr.error).slice(0, 100) : null } };
+  return { median_price_cad: prices.length >= 3 ? +median(prices).toFixed(2) : null, offers: prices.length,
+           amazon_median_cad: amazon.length ? +median(amazon).toFixed(2) : null, amazon_offers: amazon.length,
+           top_sources: [...new Set(results.map(r => r.source).filter(Boolean))].slice(0, 5), trend, trend_pct,
+           error: sh.error || tr.error ? String(sh.error || tr.error).slice(0, 100) : null };
+}
+// Store fresh results in the cache and count the searches used.
+let usedNow = 0;
+freshItems.forEach((f, k) => {
+  const sh = shop[k] || {}, tr = trends[k] || {};
+  if (shop[k]) usedNow++;
+  if (trends[k]) usedNow++;
+  const a = analyse(sh, tr);
+  if (!a.error && (a.median_price_cad !== null || a.trend !== null)) store.serpCache[f.q.toLowerCase()] = { at: Date.now(), ...a };
+  f.result = a;
 });
-const marketOk = checked > 0;
-let kept = marketOk ? enriched.filter(p => p.market.pass) : enriched;
-kept.sort((a, b) => Number(b.market.hot) - Number(a.market.hot));
+if (store.serp && store.serp.month === meta.month) {
+  store.serp.used += usedNow;
+  store.serp.days[meta.today] = (store.serp.days[meta.today] || 0) + usedNow;
+}
+let checked = 0;
+const enriched = s.top.map((p, i) => {
+  const pl = meta.plan.find(x => x.i === i) || { q: '', source: 'no_key' };
+  let a = null;
+  if (pl.source === 'fresh') a = (freshItems.find(f => f.i === i) || {}).result || null;
+  if (pl.source === 'same') a = (freshItems.find(f => f.q.toLowerCase() === pl.q.toLowerCase()) || {}).result || null;
+  if (pl.source === 'cache') a = store.serpCache[pl.q.toLowerCase()] || null;
+  if (!a || (a.median_price_cad === null && a.trend === null)) {
+    return { ...p, market: { query: pl.q, checked: false, why: pl.source === 'budget' ? 'saving free searches' : pl.source === 'no_key' ? 'no SerpApi key' : (a && a.error) || 'no market data',
+                             median_price_cad: null, ratio: null, trend: null, hot: false, pass: false } };
+  }
+  checked++;
+  const ratio = a.median_price_cad ? +(a.median_price_cad / p.landed_cad).toFixed(1) : null;
+  const hot = ratio !== null && ratio >= 2.5 && a.trend === 'rising' && p.meets_target;
+  const pass = ratio !== null && ratio >= 2 && a.trend !== 'falling';
+  return { ...p, market: { query: pl.q, checked: true, cached: pl.source === 'cache', ...a, ratio, hot, pass } };
+});
+const passed = enriched.filter(p => p.market.checked && p.market.pass)
+  .sort((a, b) => Number(b.market.hot) - Number(a.market.hot));   // otherwise keep the shortlist ranking
+const unchecked = enriched.filter(p => !p.market.checked);
+const failed = enriched.filter(p => p.market.checked && !p.market.pass);
+const kept = [...passed, ...unchecked].slice(0, 5);
+const marketOk = meta.has_key && checked > 0;
 const facts = kept.map((p, n) => ({ n: n + 1, name: p.name, landed_cad: p.landed_cad, price_cad: p.price_cad, est_profit_cad: p.est_profit_cad,
-  market_median_price_cad: p.market.median_price_cad, price_gap: p.market.ratio, search_trend: p.market.trend, competition: p.competition, flags: p.flags }));
+  warehouse: p.warehouse, market_median_price_cad: p.market.median_price_cad, price_gap: p.market.ratio, search_trend: p.market.trend, competition: p.competition, flags: p.flags }));
 const instructions = 'You are the JARVIS e-commerce research analyst for a new Shopify store selling in Canada. ' +
   'For each product write one short note (max 25 words): who would buy it, whether the market price leaves room, and the main risk. Use ONLY the facts given; ' +
   'do not invent sales numbers, trends, reviews or prices. Reply with JSON only: {"notes":[{"n":1,"note":"..."}]}';
-return [{ json: { ...s, top: kept, all_checked: enriched, market_ok: marketOk, dropped: enriched.length - kept.length,
+return [{ json: { ...s, top: kept, all_checked: enriched, market_ok: marketOk, dropped: failed.length, unchecked: kept.filter(p => !p.market.checked).length,
+  serp: { has_key: meta.has_key, used_now: usedNow, left: meta.left_before - usedNow, warning: meta.warning, key_error: meta.key_error },
   ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify(facts) }] } } }];

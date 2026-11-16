@@ -1,0 +1,2131 @@
+{
+  "name": "JARVIS Idea v1 (check my product idea)",
+  "nodes": [
+    {
+      "id": "i0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -420
+      ],
+      "parameters": {
+        "width": 2200,
+        "height": 300,
+        "content": "## JARVIS Idea v1 - check the owner's own product idea, then list it on Shopify after approval\nCalled by **JARVIS Brain** (a photo, link or \"check <product>\" on Telegram, or the agent's check_product_idea tool) at `/webhook/jarvis-idea`.\nSteps: what is it (free AI, sees photos) → your rules (no batteries/chargers, no beauty, kids, food, medical; certification flags) → best 3 CJ suppliers (Canada/US warehouses first) with shipping to Canada → market: Google Shopping Canada (incl. Amazon.ca prices when listed) and Google Trends Canada (2 SerpApi searches, cached 10 days) → verdict, price, fees, profit, marketing and Amazon FBA estimates, risks → report on Telegram with **Approve / Decline** (72 h).\n**On Approve:** product created on Shopify (title FR, description FR+EN, CJ photos, price, matching collection, CJ SKU), published to the Online Store, live link sent; then the video team renders 3 short videos (server voice service) and sends them with captions and hashtags. You connect the product in the CJ app (1 min). Amazon: prepared only once your seller account + SP-API are connected, with a separate approval before buying stock. TikTok Shop has no official data: not checked.\n**Credentials:** *Webhook*: **JARVIS screen key**; *CJ get token*: **CJ API key**; SerpApi nodes: **SerpApi**; OmniRoute nodes: **OmniRoute**; Shopify nodes: **Shopify Access Token** (custom app scopes write_products, read_publications, write_publications); Telegram nodes: **JARVIS Telegram**."
+      }
+    },
+    {
+      "id": "i1",
+      "name": "Webhook (product idea)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-idea",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b7e3d1a9-4c2f-4e6b-8a0d-1f5c9e3b7d26"
+    },
+    {
+      "id": "i2",
+      "name": "Idea input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Product idea from the owner (Telegram photo, link or name; or JARVIS's tool) -> one clean request.\nconst b = ($input.first().json || {}).body || {};\nconst kind = ['photo', 'link', 'name'].includes(b.kind) ? b.kind : (b.url ? 'link' : b.image_b64 ? 'photo' : 'name');\nlet url = b.url || null, text = String(b.text || '').trim().slice(0, 300);\nif (!url) { const m = text.match(/https?:\\/\\/\\S+/); if (m) { url = m[0]; text = text.replace(m[0], '').trim(); } }\nconst okUrl = url && /^https?:\\/\\/[^\\s/$.?#].[^\\s]*$/i.test(url) && !/^https?:\\/\\/(localhost|127\\.|10\\.|192\\.168\\.|172\\.(1[6-9]|2\\d|3[01])\\.|\\[?::1|0\\.0\\.0\\.0|omniroute|jarvis-|n8n|postgres|caddy)/i.test(url);\nconst id = 'idea_' + Date.now().toString(36);\nconst problem = !text && !okUrl && !b.image_b64 ? 'Send me a product name, a link or a photo.' : null;\nconst message = problem || ('🔎 Checking ' + (kind === 'photo' ? 'your photo' : kind === 'link' ? 'this link' : '\"' + text.slice(0, 60) + '\"') +\n  ': suppliers on CJ, competitor prices, Google searches in Canada, costs and risks. The report will arrive here in 1-3 minutes.');\nreturn [{ json: { id, kind: okUrl ? 'link' : kind, url: okUrl ? url : null, text, image_b64: b.image_b64 || null, mime: b.mime || 'image/jpeg',\n                  problem, reply: { ok: !problem, id, message } } }];\n"
+      }
+    },
+    {
+      "id": "i3",
+      "name": "Answer the caller",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.reply) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "i4",
+      "name": "Usable request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i4c",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i5",
+      "name": "Link?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i5c",
+              "leftValue": "={{ !!$json.url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i6",
+      "name": "Fetch the page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; JARVIS product check)"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-CA,en;q=0.9"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 5
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i7",
+      "name": "Read the page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -120
+      ],
+      "parameters": {
+        "jsCode": "// What the linked page says about the product (title, image, price) - no scraping beyond this one page.\nconst req = $('Idea input').first().json;\nconst r = $input.first().json || {};\nconst html = String(r.data || r.body || (typeof r === 'string' ? r : '') || '').slice(0, 400000);\nconst meta = p => { const m = html.match(new RegExp('<meta[^>]+(?:property|name)=[\"\\\\\\']' + p + '[\"\\\\\\'][^>]*content=[\"\\\\\\']([^\"\\\\\\']+)', 'i')) || html.match(new RegExp('<meta[^>]+content=[\"\\\\\\']([^\"\\\\\\']+)[\"\\\\\\'][^>]*(?:property|name)=[\"\\\\\\']' + p, 'i')); return m ? m[1] : null; };\nconst title = meta('og:title') || meta('twitter:title') || ((html.match(/<title[^>]*>([^<]{3,200})<\\/title>/i) || [])[1] || null);\nconst image = meta('og:image') || null;\nconst price = meta('product:price:amount') || meta('og:price:amount') || null;\nconst site = (req.url || '').replace(/^https?:\\/\\/(www\\.)?/, '').split('/')[0];\nconst decode = s => s ? s.replace(/&amp;/g, '&').replace(/&quot;/g, '\"').replace(/&#39;/g, \"'\").replace(/\\s+/g, ' ').trim().slice(0, 200) : s;\nreturn [{ json: { ...req, page: { title: decode(title), image: image && /^https:\\/\\//.test(image) ? image : null, price, site, fetched: !!html } } }];\n"
+      }
+    },
+    {
+      "id": "i8",
+      "name": "Identify request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Ask the free AI what the product is (it can see the photo) and how to search for it.\nconst r = $input.first().json;\nconst page = r.page || {};\nconst sys = 'IDEA_IDENTIFY. You identify a consumer product for a Canadian dropshipping store. Reply with JSON only: ' +\n  '{\"name\": \"short generic product name in English (no brand)\", \"search_query\": \"2-4 English words to search suppliers\", ' +\n  '\"category\": \"one word\", \"has_battery_or_charger\": true|false, \"is_beauty\": true|false, \"for_kids\": true|false, \"confidence\": \"high|medium|low\"}';\nconst parts = [];\nconst hint = [r.text && 'Owner says: ' + r.text, page.title && 'Page title: ' + page.title, page.site && 'Site: ' + page.site, page.price && 'Page price: ' + page.price].filter(Boolean).join('\\n');\nparts.push({ type: 'text', text: hint || 'What product is in this photo?' });\nif (r.image_b64) parts.push({ type: 'image_url', image_url: { url: 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.image_b64 } });\nreturn [{ json: { ...r, image_b64: null, had_image: !!r.image_b64,\n  ai_body: { model: 'jarvis-free', max_tokens: 300, temperature: 0.1, response_format: { type: 'json_object' },\n             messages: [{ role: 'system', content: sys }, { role: 'user', content: r.image_b64 ? parts : parts[0].text }] } } }];\n"
+      }
+    },
+    {
+      "id": "i9",
+      "name": "What is it? (free AI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://omniroute:20128/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i10",
+      "name": "Product identity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// The product, the owner's rules (batteries/chargers, beauty, kids...) and certification flags.\n// ---- Product rules (owner decisions 2026-11-16) - shared by research and idea checks ----\n// Electronics are allowed only WITHOUT batteries or chargers. Beauty stays out. Kids, food,\n// supplements, medical and weapons stay out (extra Canadian rules). Anything that may need a\n// certification is flagged, not hidden.\nconst RULES = {\n  exclude: [\n    [/batter|rechargeable|lithium|li-?ion|power ?bank|charg(er|ing)|cordless|wireless|bluetooth|solar|\\bvape\\b|e-?cig/i, 'has a battery or charger'],\n    [/cosmetic|make ?up|lipstick|mascara|eyelash|eyeliner|skin ?care|serum|face cream|lotion|perfume|fragrance|nail (polish|art|gel)|hair (dye|color|colour)|beauty|facial|wig\\b/i, 'beauty (kept out for now)'],\n    [/\\btoys?\\b|\\bkids?\\b|child|children|baby|infant|toddler|nursery/i, \"kids' product (Health Canada toy rules)\"],\n    [/\\bfood\\b|snack|supplement|vitamin|protein powder|\\btea\\b|coffee beans|candy/i, 'food or supplement'],\n    [/medical|medicine|therapy|massager|blood pressure|thermometer|hearing aid|pain relief|posture corrector|orthopedic/i, 'medical claims (Health Canada)'],\n    [/knife set|weapon|pepper spray|taser|stun|crossbow|airsoft|\\bgun\\b|cbd|nicotine/i, 'restricted item'],\n  ],\n  certification: [\n    [/electr|\\busb\\b|\\bled\\b|lamp|\\blights?\\b|plug|\\bac\\b|adapter|110v|120v|220v|heater|heat(ed|ing)|motor|fan\\b|humidifier|diffuser|kettle|blender|grinder|sensor|remote control/i,\n     'electrical: plug-in or powered items need CSA, cUL or ETL marking to be sold in Canada; ask CJ for the certificate'],\n    [/\\bradio\\b|\\bwifi\\b|wi-fi|\\brf\\b|transmitter|walkie|gps tracker|smart\\b/i, 'radio device: needs ISED Canada certification'],\n    [/cup|mug|bottle|bowl|plate|lunch ?box|cutting board|utensil|spatula|straw|food storage|container|baking|silicone mold/i,\n     'touches food: ask CJ for a food-contact test report (FDA or LFGB)'],\n    [/helmet|life ?jacket|car seat|seat ?belt|reflective vest/i, 'safety gear: may need certification (CSA or DOT)'],\n    [/magnet/i, 'small magnets: Health Canada warns about swallowing; keep packaging adult-only'],\n  ],\n};\nfunction checkRules(text) {\n  const t = String(text || '');\n  const excluded = RULES.exclude.filter(([re]) => re.test(t)).map(([, why]) => why);\n  const certification = RULES.certification.filter(([re]) => re.test(t)).map(([, why]) => why);\n  return { excluded: excluded.length ? excluded[0] : null, certification };\n}\n// ---- end of product rules ----\nconst r = $('Identify request').first().json;\nconst ai = $input.first().json || {};\nlet id = {};\ntry { id = JSON.parse(String(ai.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '')); } catch (e) { id = {}; }\nconst fallback = (r.text || (r.page && r.page.title) || '').replace(/[^\\p{L}\\p{N} -]/gu, ' ').trim();\nconst name = String(id.name || fallback || '').slice(0, 80);\nconst q = String(id.search_query || name).split(/\\s+/).slice(0, 4).join(' ');\nconst rules = checkRules([name, q, r.text, r.page && r.page.title].filter(Boolean).join(' '));\nlet excluded = rules.excluded;\nif (!excluded && id.has_battery_or_charger === true) excluded = 'has a battery or charger';\nif (!excluded && id.is_beauty === true) excluded = 'beauty (kept out for now)';\nif (!excluded && id.for_kids === true) excluded = \"kids' product (Health Canada toy rules)\";\nconst problem = (r.had_image && !id.name) ? \"I couldn't recognise the product in the photo (the free AI may not read images right now). Send me its name or a link.\" : !q ? (r.had_image ? \"I couldn't tell what the product is from the photo. Send its name or a link.\" : 'Send me the product name or a link.') : null;\nconst store = $getWorkflowStaticData('global');\nconst t = store.cjToken;\nconst tokenOk = t && t.value && t.expires && new Date(t.expires).getTime() - Date.now() > 24 * 3600 * 1000;\nreturn [{ json: { id: r.id, kind: r.kind, url: r.url, owner_text: r.text, page: r.page || {}, name, q, category: id.category || '',\n  confidence: id.confidence || (id.name ? 'medium' : 'low'), excluded, certification: rules.certification, problem,\n  need_token: !tokenOk, token: tokenOk ? t.value : null } }];\n"
+      }
+    },
+    {
+      "id": "i11",
+      "name": "Need a CJ token?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i11c",
+              "leftValue": "={{ $json.need_token === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i12",
+      "name": "CJ get token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "i13",
+      "name": "Save token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -120
+      ],
+      "parameters": {
+        "jsCode": "// Keep the CJ access token (valid about 15 days).\nconst r = $input.first().json || {};\nconst d = r.data || {};\nif (!d.accessToken) throw new Error('CJ did not return an access token: ' + JSON.stringify(r).slice(0, 300));\n$getWorkflowStaticData('global').cjToken = { value: d.accessToken, expires: d.accessTokenExpiryDate || new Date(Date.now() + 14 * 864e5).toISOString() };\nreturn [{ json: { ...$('Product identity').first().json, need_token: false, token: d.accessToken } }];\n"
+      }
+    },
+    {
+      "id": "i14",
+      "name": "CJ searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// The same product in CJ's Canada and US warehouses first (fast delivery), then all of CJ.\nconst p = $input.first().json;\nconst store = $getWorkflowStaticData('global');\nif (!p.token && store.cjToken) p.token = store.cjToken.value;\nreturn ['CA', 'US', 'CN'].map(w => {\n  const query = { pageNum: 1, pageSize: 20, productNameEn: p.q, orderBy: 'listedNum' };\n  if (w !== 'CN') query.countryCode = w;\n  return { json: { warehouse: w, query, token: p.token } };\n});\n"
+      }
+    },
+    {
+      "id": "i15",
+      "name": "CJ product search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/list",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.query) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i16",
+      "name": "Best 3 suppliers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Best 3 CJ listings (\"suppliers\") for the product: relevant name, allowed by the owner's rules,\n// CA/US warehouse first, a healthy number of stores already selling it, then lower price.\n// ---- Product rules (owner decisions 2026-11-16) - shared by research and idea checks ----\n// Electronics are allowed only WITHOUT batteries or chargers. Beauty stays out. Kids, food,\n// supplements, medical and weapons stay out (extra Canadian rules). Anything that may need a\n// certification is flagged, not hidden.\nconst RULES = {\n  exclude: [\n    [/batter|rechargeable|lithium|li-?ion|power ?bank|charg(er|ing)|cordless|wireless|bluetooth|solar|\\bvape\\b|e-?cig/i, 'has a battery or charger'],\n    [/cosmetic|make ?up|lipstick|mascara|eyelash|eyeliner|skin ?care|serum|face cream|lotion|perfume|fragrance|nail (polish|art|gel)|hair (dye|color|colour)|beauty|facial|wig\\b/i, 'beauty (kept out for now)'],\n    [/\\btoys?\\b|\\bkids?\\b|child|children|baby|infant|toddler|nursery/i, \"kids' product (Health Canada toy rules)\"],\n    [/\\bfood\\b|snack|supplement|vitamin|protein powder|\\btea\\b|coffee beans|candy/i, 'food or supplement'],\n    [/medical|medicine|therapy|massager|blood pressure|thermometer|hearing aid|pain relief|posture corrector|orthopedic/i, 'medical claims (Health Canada)'],\n    [/knife set|weapon|pepper spray|taser|stun|crossbow|airsoft|\\bgun\\b|cbd|nicotine/i, 'restricted item'],\n  ],\n  certification: [\n    [/electr|\\busb\\b|\\bled\\b|lamp|\\blights?\\b|plug|\\bac\\b|adapter|110v|120v|220v|heater|heat(ed|ing)|motor|fan\\b|humidifier|diffuser|kettle|blender|grinder|sensor|remote control/i,\n     'electrical: plug-in or powered items need CSA, cUL or ETL marking to be sold in Canada; ask CJ for the certificate'],\n    [/\\bradio\\b|\\bwifi\\b|wi-fi|\\brf\\b|transmitter|walkie|gps tracker|smart\\b/i, 'radio device: needs ISED Canada certification'],\n    [/cup|mug|bottle|bowl|plate|lunch ?box|cutting board|utensil|spatula|straw|food storage|container|baking|silicone mold/i,\n     'touches food: ask CJ for a food-contact test report (FDA or LFGB)'],\n    [/helmet|life ?jacket|car seat|seat ?belt|reflective vest/i, 'safety gear: may need certification (CSA or DOT)'],\n    [/magnet/i, 'small magnets: Health Canada warns about swallowing; keep packaging adult-only'],\n  ],\n};\nfunction checkRules(text) {\n  const t = String(text || '');\n  const excluded = RULES.exclude.filter(([re]) => re.test(t)).map(([, why]) => why);\n  const certification = RULES.certification.filter(([re]) => re.test(t)).map(([, why]) => why);\n  return { excluded: excluded.length ? excluded[0] : null, certification };\n}\n// ---- end of product rules ----\nconst p = $('Product identity').first().json;\nconst searches = $('CJ searches').all().map(i => i.json);\nconst words = t => new Set(String(t).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\\s+/).filter(w => w.length > 2 && !['for', 'and', 'the', 'with', 'new'].includes(w)));\nconst qw = words(p.q + ' ' + p.name);\nconst seen = new Set(), all = [];\n$input.all().forEach((item, idx) => {\n  const r = item.json || {};\n  let list = (r.data && (r.data.list || r.data.content)) || [];\n  if (list.length && Array.isArray(list[0].productList)) list = list.flatMap(x => x.productList);\n  for (const x of list) {\n    const pid = x.pid || x.id; if (!pid || seen.has(pid)) continue;\n    const name = x.productNameEn || x.nameEn || x.productName || '';\n    const price = parseFloat(String(x.sellPrice ?? x.nowPrice ?? '').split('-')[0]);\n    if (!name || !(price > 0)) continue;\n    const overlap = [...words(name)].filter(w => qw.has(w)).length;\n    if (overlap === 0) continue;\n    const rule = checkRules(name + ' ' + (x.categoryName || ''));\n    if (rule.excluded) continue;\n    seen.add(pid);\n    let image = x.productImage || x.bigImage || '';\n    if (typeof image === 'string' && image.trim().startsWith('[')) { try { image = JSON.parse(image)[0] || ''; } catch { image = ''; } }\n    image = String(Array.isArray(image) ? image[0] : image || '').replace(/^http:/, 'https:');\n    const n = Number(x.listedNum ?? 0) || 0;\n    all.push({ pid, name: name.slice(0, 120), sku: x.productSku || '', price_usd: price, image: /^https:/.test(image) ? image : '',\n               warehouse: searches[idx] ? searches[idx].warehouse : 'CN', listed_by_stores: n, overlap,\n               competition: n < 20 ? 'unproven' : n < 2000 ? 'healthy' : n < 8000 ? 'crowded' : 'saturated',\n               certification: rule.certification, token: searches[0] && searches[0].token });\n  }\n});\nconst BAND = { healthy: 0, crowded: 1, unproven: 2, saturated: 3 };\nall.sort((a, b) => b.overlap - a.overlap || ((b.warehouse !== 'CN') - (a.warehouse !== 'CN')) || BAND[a.competition] - BAND[b.competition] || a.price_usd - b.price_usd);\nconst best = all.slice(0, 3);\nif (!best.length) return [{ json: { none: true } }];\nreturn best.map((s, i) => ({ json: { rank: i + 1, ...s } }));\n"
+      }
+    },
+    {
+      "id": "i17",
+      "name": "Found suppliers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i17c",
+              "leftValue": "={{ $json.none !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i18",
+      "name": "CJ variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        -100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/variant/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pid",
+              "value": "={{ $json.pid }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i19",
+      "name": "Supplier variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "// First sellable variant of each supplier listing (id for shipping, price, weight, SKU).\nconst sup = $('Best 3 suppliers').all().map(i => i.json);\nreturn $input.all().map((item, idx) => {\n  const s = sup[idx]; const r = item.json || {};\n  const vs = Array.isArray(r.data) ? r.data : (r.data && (r.data.variants || r.data.list)) || [];\n  const v = vs.find(x => x && (x.vid || x.variantId)) || null;\n  return { json: { ...s, vid: v ? (v.vid || v.variantId) : null, variant_sku: v ? (v.variantSku || '') : '',\n    cost_usd: v ? parseFloat(v.variantSellPrice ?? v.sellPrice ?? s.price_usd) || s.price_usd : s.price_usd,\n    weight_g: v ? Number(v.variantWeight ?? 0) || null : null } };\n});\n"
+      }
+    },
+    {
+      "id": "i20",
+      "name": "CJ shipping to Canada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/logistic/freightCalculate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $('Best 3 suppliers').first().json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ startCountryCode: $json.warehouse || 'CN', endCountryCode: 'CA', products: [{ quantity: 1, vid: $json.vid }] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i21",
+      "name": "Supplier costs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Landed cost per supplier (cheapest shipping option within 20 days; fastest first in the holiday season).\nconst sup = $('Supplier variant').all().map(i => i.json);\nconst maxDays = o => { const n = (String(o.days).match(/\\d+/g) || []).map(Number); return n.length ? Math.max(...n) : 99; };\nconst out = $input.all().map((item, idx) => {\n  const s = sup[idx]; const r = item.json || {};\n  const opts = (Array.isArray(r.data) ? r.data : []).map(o => ({ name: o.logisticName || '?', usd: parseFloat(o.logisticPrice), days: String(o.logisticAging || '') })).filter(o => o.usd >= 0);\n  const ok = opts.filter(o => maxDays(o) <= 20).sort((a, b) => a.usd - b.usd);\n  const ship = ok[0] || opts.sort((a, b) => a.usd - b.usd)[0] || null;\n  const landed_cad = +((s.cost_usd + (ship ? ship.usd : 0)) * 1.40).toFixed(2);\n  return { ...s, shipping: ship, days: ship ? maxDays(ship) : null, landed_cad };\n});\nout.sort((a, b) => (a.shipping ? 0 : 1) - (b.shipping ? 0 : 1) || ((a.days || 99) <= 10 ? 0 : 1) - ((b.days || 99) <= 10 ? 0 : 1) || a.landed_cad - b.landed_cad);   // fast (10 days or less) first, then cheapest\nreturn [{ json: { suppliers: out } }];\n"
+      }
+    },
+    {
+      "id": "i22",
+      "name": "No suppliers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        120
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { suppliers: [] } }];"
+      }
+    },
+    {
+      "id": "i23",
+      "name": "SerpApi account (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/account.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i24",
+      "name": "Market plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// SerpApi for one idea: 2 searches (Google Shopping Canada + Google Trends Canada), cached 10 days.\n// Idea checks may use the 40 searches the daily research keeps in reserve, but never go over the free plan.\nconst p = $('Product identity').first().json;\nconst acc = $input.first().json || {};\nconst store = $getWorkflowStaticData('global');\nstore.serpCache = store.serpCache || {};\nconst key = p.q.toLowerCase();\nconst c = store.serpCache[key];\nconst hasKey = !acc.error && (acc.total_searches_left !== undefined || acc.plan_searches_left !== undefined);\nconst left = hasKey ? Number(acc.total_searches_left ?? acc.plan_searches_left) : 0;\nlet source = 'none';\nif (p.excluded) source = 'skip';             // not allowed by the owner's rules: don't spend searches\nelse if (c && Date.now() - c.at < 10 * 864e5) source = 'cache';\nelse if (hasKey && left >= 2) source = 'fresh';\nconst warning = source === 'skip' ? null : !hasKey ? 'Market check off: SerpApi key missing or not working.' : left - (source === 'fresh' ? 2 : 0) < 20 ? `⚠️ SerpApi: ${left - (source === 'fresh' ? 2 : 0)} free searches left this month.` : null;\nreturn [{ json: { q: p.q, source, fresh: source === 'fresh', left, has_key: hasKey, warning } }];\n"
+      }
+    },
+    {
+      "id": "i25",
+      "name": "Fresh market check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5060,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i25c",
+              "leftValue": "={{ $json.fresh === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i26",
+      "name": "Google Shopping (Canada)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5280,
+        -120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_shopping"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "gl",
+              "value": "ca"
+            },
+            {
+              "name": "hl",
+              "value": "en"
+            },
+            {
+              "name": "location",
+              "value": "Canada"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i27",
+      "name": "Google Trends (Canada)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5500,
+        -120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_trends"
+            },
+            {
+              "name": "q",
+              "value": "={{ $('Market plan').first().json.q }}"
+            },
+            {
+              "name": "geo",
+              "value": "CA"
+            },
+            {
+              "name": "date",
+              "value": "today 3-m"
+            },
+            {
+              "name": "data_type",
+              "value": "TIMESERIES"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i28",
+      "name": "Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Verdict and numbers for the owner's product idea (no AI): market, best supplier, price, fees, profit,\n// marketing estimate, Amazon FBA stock estimate, risks. Then asks the free AI for an original listing and 3 video scripts.\nconst p = $('Product identity').first().json;\nconst costs = $('Supplier costs').first().json;\nconst plan = $('Market plan').first().json;\nconst store = $getWorkflowStaticData('global');\nstore.serpCache = store.serpCache || {};\nconst median = a => { const b = [...a].sort((x, y) => x - y); return b.length ? (b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : null; };\nlet m = null;\nif (plan.source === 'cache') m = store.serpCache[plan.q.toLowerCase()];\nif (plan.source === 'fresh') {\n  let sh = {}, tr = {};\n  try { sh = $('Google Shopping (Canada)').first().json || {}; } catch (e) {}\n  try { tr = $('Google Trends (Canada)').first().json || {}; } catch (e) {}\n  const res = sh.shopping_results || [];\n  const prices = res.map(r => Number(r.extracted_price)).filter(x => x > 0 && x < 2000);\n  const amazon = res.filter(r => /amazon/i.test(r.source || '')).map(r => Number(r.extracted_price)).filter(x => x > 0);\n  const others = res.filter(r => r.source && !/amazon|walmart|ebay|aliexpress|temu/i.test(r.source)).slice(0, 4).map(r => ({ source: r.source, price: Number(r.extracted_price) }));\n  const tl = ((tr.interest_over_time || {}).timeline_data || []).map(t => Number(((t.values || [])[0] || {}).extracted_value) || 0);\n  let trend = null, trend_pct = null;\n  if (tl.length >= 8) { const avg = a => a.reduce((x, y) => x + y, 0) / a.length; const f = avg(tl.slice(0, 4)), l = avg(tl.slice(-4));\n    trend_pct = f > 0 ? Math.round((l - f) / f * 100) : (l > 0 ? 100 : 0); trend = trend_pct >= 20 ? 'rising' : trend_pct <= -20 ? 'falling' : 'flat'; }\n  m = { at: Date.now(), median_price_cad: prices.length >= 3 ? +median(prices).toFixed(2) : null, offers: prices.length,\n        amazon_median_cad: amazon.length ? +median(amazon).toFixed(2) : null, amazon_offers: amazon.length, others, trend, trend_pct,\n        error: sh.error || tr.error ? String(sh.error || tr.error).slice(0, 100) : null };\n  if (!m.error && (m.median_price_cad !== null || m.trend !== null)) store.serpCache[plan.q.toLowerCase()] = m;\n}\nconst sup = costs.suppliers || [];\nconst best = sup[0] || null;\nconst R = x => Math.round(x * 100) / 100;\nlet price = null, fees = 0, profit = null, profit_ads = null;\nif (best) {\n  const L = best.landed_cad;\n  const floor = Math.max(L * 2, L + 12);\n  price = m && m.median_price_cad ? Math.max(floor, Math.min(m.median_price_cad * 0.95, L * 3.5)) : Math.max(L * 2.5, L + 12);\n  price = Math.ceil(price) - 0.01;\n  fees = price * 0.029 + 0.30;\n  profit = R(price - L - fees - price * 0.05);\n  profit_ads = R(profit - price * 0.20);\n}\nconst ratio = best && m && m.median_price_cad ? +(m.median_price_cad / best.landed_cad).toFixed(1) : null;\n// Marketing: our video team is free (Kokoro voice + product photos); a small paid ad test only with approval.\nconst ad_test_cad = 50;\nconst breakeven_sales = profit > 0 ? Math.ceil(ad_test_cad / profit) : null;\n// Amazon FBA (rough, verify with Amazon's FBA revenue calculator): 50 units, air freight to an Amazon warehouse ~ 9 USD/kg,\n// referral fee 15%, FBA fee ~ 5.50 CAD for a small standard item.\nlet fba = null;\nif (best) {\n  const units = 50, kg = (best.weight_g || 300) / 1000;\n  const stock = units * best.cost_usd * 1.40, freight = units * Math.max(1.5, kg * 9) * 1.40;\n  const amzPrice = m && m.amazon_median_cad ? m.amazon_median_cad : price;\n  const perUnitFees = amzPrice * 0.15 + 5.50;\n  fba = { units, stock_cad: R(stock), freight_cad: R(freight), total_cad: R(stock + freight), amazon_price_cad: R(amzPrice),\n          fees_per_unit_cad: R(perUnitFees), profit_per_unit_cad: R(amzPrice - perUnitFees - (stock + freight) / units) };\n}\nconst risks = [];\nif (p.excluded) risks.push('Not allowed by your rules: ' + p.excluded);\n(p.certification || []).concat(best ? best.certification || [] : []).filter((x, i, a) => a.indexOf(x) === i).forEach(c => risks.push('Certification: ' + c));\nif (!best) risks.push('No matching product found on CJ');\nif (best && best.competition === 'saturated') risks.push(best.listed_by_stores + ' stores already sell it on CJ (saturated)');\nif (best && best.competition === 'unproven') risks.push('Few stores sell it yet (unproven)');\nif (best && (best.days || 99) > 10) risks.push('Delivery over 10 days (' + (best.shipping ? best.shipping.days : '?') + ')');\nif (m && m.trend === 'falling') risks.push('Google searches in Canada are falling');\nif (!m || (m.median_price_cad === null && m.trend === null)) risks.push('No market data (SerpApi)');\nif (ratio !== null && ratio < 2) risks.push('Market price is only ' + ratio + 'x our cost: thin room');\nlet verdict = 'MAYBE';\nif (p.excluded || !best || (ratio !== null && ratio < 1.6) || (profit !== null && profit < 5)) verdict = 'NO';\nelse if (ratio !== null && ratio >= 2 && m.trend !== 'falling' && profit >= 10 && (best.days || 99) <= 10 && !risks.some(r => r.startsWith('Certification'))) verdict = 'GOOD';   // certification to check first = MAYBE\nconst sys = 'IDEA_LISTING. You write for Rangéo, a Canadian online store (Quebec): French first, then English. Original wording only (never copy the supplier text), ' +\n  'no health or safety claims, no brand names, no fake reviews or fake scarcity. Reply with JSON only: {\"title_fr\": \"max 70 chars\", \"title_en\": \"max 70 chars\", ' +\n  '\"description_html\": \"<p>French paragraph</p><ul><li>3 French benefit bullets</li></ul><p>English paragraph</p><ul><li>3 English bullets</li></ul>\", ' +\n  '\"tags\": [\"5 lowercase tags\"], \"product_type\": \"one or two words\", ' +\n  '\"videos\": [{\"hook\": \"first 2 seconds, max 8 words\", \"lines\": [\"3 short voice-over lines, max 12 words each\"], \"caption\": \"post caption, max 150 chars\", \"hashtags\": [\"5 hashtags\"]}] ' +\n  '(exactly 3 videos with DIFFERENT hooks: a problem hook, a surprise/demo hook, a gift hook for Christmas). English for the videos.}';\nconst facts = { product: p.name, supplier_title: best ? best.name : null, price_cad: price, warehouse: best ? best.warehouse : null, delivery_days: best ? best.shipping && best.shipping.days : null };\nreturn [{ json: { id: p.id, name: p.name, q: p.q, kind: p.kind, url: p.url, page: p.page, verdict, risks, suppliers: sup, best, market: m, market_source: plan.source,\n  serp_warning: plan.warning, ratio, price_cad: price, fees_cad: R(fees), profit_cad: profit, profit_with_ads_cad: profit_ads,\n  marketing: { videos_cad: 0, ad_test_cad, breakeven_sales }, fba, can_list: !!best && !p.excluded,   // the owner decides even on a weak verdict\n  ai_body: { model: 'jarvis-free', max_tokens: 1400, temperature: 0.6, response_format: { type: 'json_object' },\n             messages: [{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify(facts) }] } } }];\n"
+      }
+    },
+    {
+      "id": "i29",
+      "name": "Listing + video scripts (free AI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5940,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://omniroute:20128/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i30",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// The full report for Telegram (HTML) + the approval text + the listing draft kept for after the approval.\nconst v = $('Verdict').first().json;\nconst ai = $input.first().json || {};\nlet L = {};\ntry { L = JSON.parse(String(ai.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '')); } catch (e) { L = {}; }\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst b = v.best, m = v.market || {};\nconst icon = { GOOD: '✅ GOOD', MAYBE: '🟡 MAYBE', NO: '⛔ NOT RECOMMENDED' }[v.verdict];\nconst lines = [`<b>Product check: ${esc(v.name)}</b>`, `Verdict: <b>${icon}</b>`];\nif (m && (m.median_price_cad || m.trend)) {\n  lines.push('', '<b>Market (Canada)</b>' + (v.market_source === 'cache' ? ' · saved check' : ''));\n  if (m.trend) lines.push(`Google searches: ${m.trend} (${m.trend_pct > 0 ? '+' : ''}${m.trend_pct}% in 3 months)`);\n  if (m.median_price_cad) lines.push(`Others sell at ~${m.median_price_cad} CAD (${m.offers} offers)` + (v.ratio ? `, ${v.ratio}× our cost` : ''));\n  lines.push('Amazon.ca: ' + (m.amazon_median_cad ? `~${m.amazon_median_cad} CAD (${m.amazon_offers} offer${m.amazon_offers > 1 ? 's' : ''} in Google Shopping)` : 'not seen in Google Shopping'));\n  if (m.others && m.others.length) lines.push('Other stores: ' + m.others.map(o => `${esc(o.source)} ${o.price} CAD`).join(', '));\n} else lines.push('', 'Market: no data' + (v.serp_warning ? ' (' + esc(v.serp_warning) + ')' : ''));\nlines.push('TikTok Shop: no official data available (JARVIS does not scrape TikTok).');\nif (v.suppliers.length) {\n  lines.push('', '<b>Best suppliers (CJ)</b>');\n  v.suppliers.forEach((s, i) => lines.push(`${i + 1}. ${esc(s.name.slice(0, 70))} · ${s.warehouse === 'CN' ? '📦 China' : '🚚 ' + s.warehouse} · ${s.cost_usd.toFixed(2)} USD + ship ` +\n    (s.shipping ? `${s.shipping.usd.toFixed(2)} USD (${esc(s.shipping.days)} days)` : 'unknown') + ` = ${s.landed_cad} CAD · ${s.listed_by_stores} stores · SKU ${esc(s.sku)}`));\n}\nif (b) {\n  lines.push('', '<b>Money (best supplier, estimates)</b>',\n    `Supplier ${b.cost_usd.toFixed(2)} USD + shipping ${b.shipping ? b.shipping.usd.toFixed(2) : '?'} USD = landed ${b.landed_cad} CAD`,\n    `Suggested price: <b>${v.price_cad} CAD</b> (shipping included)`,\n    `Fees: payment ${v.fees_cad} CAD + 5% returns allowance`,\n    `Profit per sale: <b>${v.profit_cad} CAD</b> (${v.profit_with_ads_cad} CAD if 20% goes to ads)`,\n    `Marketing: 3 videos by JARVIS = 0 CAD · small ad test ${v.marketing.ad_test_cad} CAD (5 days × 10 CAD, only if you approve)` + (v.marketing.breakeven_sales ? ` · pays back after ${v.marketing.breakeven_sales} sales` : ''));\n  if (v.fba) lines.push(`Amazon FBA (rough): ${v.fba.units} units = ${v.fba.stock_cad} CAD stock + ~${v.fba.freight_cad} CAD freight = <b>${v.fba.total_cad} CAD up front</b>; at ${v.fba.amazon_price_cad} CAD Amazon fees ~${v.fba.fees_per_unit_cad} CAD/unit, profit ~${v.fba.profit_per_unit_cad} CAD/unit. Waits for your seller account.`);\n}\nlines.push('', '<b>Risks</b>', v.risks.length ? v.risks.map(r => '• ' + esc(r)).join('\\n') : '• none found');\nif (L.title_fr || L.title_en) lines.push('', `<b>Listing draft</b>: ${esc(L.title_fr || '')}${L.title_en ? ' / ' + esc(L.title_en) : ''}`);\nlines.push('', v.can_list ? 'Tap Approve below to list it on Rangéo (Shopify) at ' + v.price_cad + ' CAD. The video team then makes 3 short videos.' : 'Not offered for listing (see risks).');\nconst report = lines.join('\\n').slice(0, 4000);\nconst mdEsc = t => String(t ?? '').replace(/([_*`\\[])/g, '\\\\$1');\nconst approval_text = `*List on Rangéo?* ${mdEsc(L.title_fr || v.name)}\\nPrice ${mdEsc(v.price_cad)} CAD, profit ~${mdEsc(v.profit_cad)} CAD per sale, verdict ${v.verdict}.\\nApprove = I create the product on Shopify (active, with photos) and send you the live link. Decline = nothing happens.`;\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst summary = `Product idea check (${day}): ${v.name} - verdict ${v.verdict}` + (b ? `, best supplier CJ SKU ${b.sku} (${b.warehouse} warehouse), landed ${b.landed_cad} CAD, suggested price ${v.price_cad} CAD, profit ~${v.profit_cad} CAD` : ', no supplier found') +\n  (m && m.median_price_cad ? `, market ~${m.median_price_cad} CAD` : '') + (m && m.trend ? `, searches ${m.trend}` : '') + '. Report sent on Telegram' + (v.can_list ? ' with Approve/Decline.' : '.');\nconst photo = (b && b.image) || (v.page && v.page.image) || '';\nreturn [{ json: { ...v, listing: { title_fr: String(L.title_fr || v.name).slice(0, 120), title_en: String(L.title_en || '').slice(0, 120),\n  description_html: String(L.description_html || '<p>' + esc(v.name) + '</p>').slice(0, 6000), tags: Array.isArray(L.tags) ? L.tags.slice(0, 8).map(String) : [],\n  product_type: String(L.product_type || '').slice(0, 60), videos: Array.isArray(L.videos) ? L.videos.slice(0, 3) : [] },\n  report, approval_text, photo, has_photo: !!photo, caption: `<b>${esc(v.name)}</b> · ${icon}`, kind: 'idea', summary: summary.slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "i31",
+      "name": "Send photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6380,
+        -120
+      ],
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "6203634137",
+        "binaryData": false,
+        "file": "={{ $('Report').first().json.photo }}",
+        "additionalFields": {
+          "caption": "={{ $('Report').first().json.caption }}",
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i32",
+      "name": "Send report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6600,
+        0
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $('Report').first().json.report }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i33",
+      "name": "Memory row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        160
+      ],
+      "parameters": {
+        "jsCode": "const r = $('Report').first().json;\nreturn [{ json: { kind: r.kind, summary: r.summary } }];"
+      }
+    },
+    {
+      "id": "i34",
+      "name": "Save idea to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6820,
+        160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i35",
+      "name": "Offer to list?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6820,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i35c",
+              "leftValue": "={{ $('Report').first().json.can_list === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i36",
+      "name": "Ask owner: list on Shopify?",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        7040,
+        -60
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "6203634137",
+        "message": "={{ $('Report').first().json.approval_text }}",
+        "responseType": "approval",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "✅ Approve: list it",
+            "disapproveLabel": "❌ Decline"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 72,
+              "resumeUnit": "hours"
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "c8f4e2b0-5d3a-4f7c-9b1e-2a6d0f4c8e37"
+    },
+    {
+      "id": "i37",
+      "name": "Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7260,
+        -60
+      ],
+      "parameters": {
+        "jsCode": "// The owner's answer to \"List on Rangéo?\" (Approve / Decline / no answer in 72 h).\nconst r = $input.first().json || {};\nconst approved = (r.data ? r.data.approved : r.approved) === true;\nconst rep = $('Report').first().json;\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nreturn [{ json: { approved, kind: 'approval', summary: `Listing approval (${day}): ${rep.name} at ${rep.price_cad} CAD - ${approved ? 'APPROVED by the owner: JARVIS lists it on Shopify and makes 3 videos' : 'DECLINED by the owner (or no answer in 72 h): nothing listed'}.`,\n  reply_text: approved ? `✅ Approved. Creating \"${rep.listing.title_fr}\" on Rangéo now...` : `❌ Declined: ${rep.name}. Nothing was listed.` } }];\n"
+      }
+    },
+    {
+      "id": "i38",
+      "name": "Save decision",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        7480,
+        80
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i39",
+      "name": "Tell owner: decision",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        7480,
+        -200
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.reply_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i40",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7480,
+        -60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i40c",
+              "leftValue": "={{ $json.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i41",
+      "name": "CJ product photos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7700,
+        -60
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pid",
+              "value": "={{ $('Report').first().json.best.pid }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $getWorkflowStaticData('global').cjToken ? $getWorkflowStaticData('global').cjToken.value : '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i42",
+      "name": "Shopify: collections + channels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7920,
+        -60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: '{ collections(first: 50) { nodes { id title } } publications(first: 20) { nodes { id name } } }' }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i43",
+      "name": "Product for Shopify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8140,
+        -60
+      ],
+      "parameters": {
+        "jsCode": "// Shopify product (GraphQL productSet): original title and description, CJ photos, price, collection, CJ SKU.\n// Active on the Online Store right after the owner's approval.\nconst rep = $('Report').first().json;\nconst g = ($input.first().json || {}).data || {};\nlet cj = {};\ntry { cj = ($('CJ product photos').first().json || {}).data || {}; } catch (e) { cj = {}; }\nlet imgs = cj.productImageSet || cj.productImage || [];\nif (typeof imgs === 'string') { try { imgs = imgs.trim().startsWith('[') ? JSON.parse(imgs) : [imgs]; } catch (e) { imgs = [imgs]; } }\nimgs = [...new Set([rep.best && rep.best.image, ...(Array.isArray(imgs) ? imgs : [])].filter(u => typeof u === 'string' && /^https?:\\/\\//.test(u)).map(u => u.replace(/^http:/, 'https:')))].slice(0, 6);\nconst words = t => new Set(String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').split(/\\s+/).filter(w => w.length > 3));\nconst want = words([rep.listing.product_type, rep.listing.tags.join(' '), rep.name, rep.listing.title_en].join(' '));\nconst cols = ((g.collections || {}).nodes || []).map(c => ({ ...c, score: [...words(c.title)].filter(w => want.has(w)).length }));\ncols.sort((a, b) => b.score - a.score);\nconst collection = cols[0] && cols[0].score > 0 ? cols[0] : null;\nconst pub = ((g.publications || {}).nodes || []).find(p => /online store|boutique en ligne/i.test(p.name)) || null;\nconst sku = (rep.best && (rep.best.variant_sku || rep.best.sku)) || '';\nconst input = {\n  title: rep.listing.title_fr, descriptionHtml: rep.listing.description_html, vendor: 'Rangéo', productType: rep.listing.product_type || 'Accessoires',\n  tags: [...rep.listing.tags, 'jarvis', 'cj-' + (rep.best ? rep.best.warehouse.toLowerCase() : 'cn')].slice(0, 10), status: 'ACTIVE',\n  productOptions: [{ name: 'Title', position: 1, values: [{ name: 'Default Title' }] }],\n  variants: [{ optionValues: [{ optionName: 'Title', name: 'Default Title' }], price: String(rep.price_cad), inventoryPolicy: 'CONTINUE',\n               inventoryItem: { sku, tracked: false, requiresShipping: true } }],\n  files: imgs.map((u, i) => ({ originalSource: u, contentType: 'IMAGE', alt: rep.listing.title_fr + (i ? ' ' + (i + 1) : '') })),\n};\nif (collection) input.collections = [collection.id];\nconst query = 'mutation productSet($input: ProductSetInput!, $synchronous: Boolean!) { productSet(synchronous: $synchronous, input: $input) { product { id handle onlineStoreUrl } userErrors { field message } } }';\nreturn [{ json: { gql: { query, variables: { input, synchronous: true } }, publication_id: pub ? pub.id : null, collection: collection ? collection.title : null,\n                  images: imgs.length, sku, shop_error: g.errors || ($input.first().json || {}).errors || null } }];\n"
+      }
+    },
+    {
+      "id": "i44",
+      "name": "Shopify: create product",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8360,
+        -60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gql) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i45",
+      "name": "Created + channel known?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        8580,
+        -60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i45c",
+              "leftValue": "={{ !!($json.data && $json.data.productSet && $json.data.productSet.product) && !!$('Product for Shopify').first().json.publication_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i46",
+      "name": "Publish to Online Store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8800,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "shopifyAccessTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: 'mutation p($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { field message } } }', variables: { id: $('Shopify: create product').first().json.data.productSet.product.id, input: [{ publicationId: $('Product for Shopify').first().json.publication_id }] } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "i47",
+      "name": "Listing result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9020,
+        -60
+      ],
+      "parameters": {
+        "jsCode": "// Live link (or what went wrong) for the owner, and a memory row.\nconst inp = $('Product for Shopify').first().json;\nconst rep = $('Report').first().json;\nconst created = $('Shopify: create product').first().json || {};\nconst res = (created.data && created.data.productSet) || {};\nconst errs = (res.userErrors || []).map(e => e.message).concat(created.errors ? [].concat(created.errors).map(e => e.message || String(e)) : []).concat(created.error ? [String(created.error.message || created.error)] : []);\nlet pubErr = null;\ntry { const p = $('Publish to Online Store').first().json || {}; const ue = (p.data && p.data.publishablePublish && p.data.publishablePublish.userErrors) || []; if (ue.length || p.errors || p.error) pubErr = (ue[0] && ue[0].message) || JSON.stringify(p.errors || p.error).slice(0, 200); } catch (e) { pubErr = 'not run'; }\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst ok = !!(res.product && res.product.handle) && !errs.length;\nconst link = ok ? (res.product.onlineStoreUrl || 'https://rangeo-ca.myshopify.com/products/' + res.product.handle) : null;\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst text = ok\n  ? `🟢 <b>Live on Rangéo</b>: ${esc(rep.listing.title_fr)}\\n${esc(link)}\\nPrice ${rep.price_cad} CAD · ${inp.images} photo(s) · collection: ${esc(inp.collection || 'none matched')}` +\n    (pubErr ? `\\n⚠️ Online Store publishing: ${esc(pubErr)}. In Shopify > Products, open it and tick Online Store.` : '') +\n    `\\n\\n<b>One step for you (1 min):</b> in the CJ app (Shopify > Apps > CJdropshipping > Products > Connection), connect this product to CJ SKU ${esc(inp.sku)} so orders go to CJ automatically.` +\n    `\\n<b>Amazon:</b> when your seller account and SP-API are connected, I'll prepare the Amazon listing and the FBA stock order (about ${rep.fba ? rep.fba.total_cad : '?'} CAD) and ask your approval separately before buying any stock.` +\n    '\\n🎬 The video team is making 3 short videos now.'\n  : `⚠️ <b>Shopify listing failed</b> for ${esc(rep.listing.title_fr)}: ${esc(errs.join('; ') || 'no answer from Shopify')}.\\nCheck the Shopify credential (custom app with write_products, read_publications and write_publications). Nothing was published.`;\nreturn [{ json: { ok, link, text, kind: 'listing', summary: ok ? `Listed on Shopify (${day}): ${rep.listing.title_fr} at ${rep.price_cad} CAD, CJ SKU ${inp.sku}, ${link}. Owner must connect it in the CJ app.` : `Shopify listing FAILED (${day}) for ${rep.name}: ${errs.join('; ').slice(0, 300)}` } }];\n"
+      }
+    },
+    {
+      "id": "i48",
+      "name": "Send live link",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        9240,
+        -160
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $('Listing result').first().json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i49",
+      "name": "Save listing to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        9240,
+        40
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i50",
+      "name": "Listed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        9460,
+        -160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i50c",
+              "leftValue": "={{ $('Listing result').first().json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i51",
+      "name": "Video scripts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9680,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "// Video team: 3 short vertical videos (different hooks) from the product photos + JARVIS's voice.\n// The server's voice service renders each one (POST /video); captions and hashtags go with each video.\nconst rep = $('Report').first().json;\nconst imgs = ($('Product for Shopify').first().json.gql.variables.input.files || []).map(f => f.originalSource).slice(0, 5);\nlet vids = rep.listing.videos || [];\nconst name = rep.name;\nconst fallback = [\n  { hook: `Still struggling with this?`, lines: [`Meet the ${name}.`, 'Simple, useful, and ready for every day.', 'Link in bio.'], caption: name, hashtags: ['#rangeo', '#canada', '#homefinds', '#musthave', '#giftideas'] },\n  { hook: `You need to see this`, lines: [`The ${name} does the job in seconds.`, 'No mess, no fuss.', 'Shop it at Rangéo.'], caption: name, hashtags: ['#rangeo', '#canada', '#tiktokmademebuyit', '#gadget', '#shopsmall'] },\n  { hook: `Gift idea under ${Math.ceil(rep.price_cad)} dollars`, lines: [`The ${name}.`, 'Fast delivery in Canada.', 'Order before Christmas.'], caption: name, hashtags: ['#rangeo', '#christmasgift', '#giftideas', '#canada', '#blackfriday'] },\n];\nwhile (vids.length < 3) vids.push(fallback[vids.length]);\nvids = vids.slice(0, 3).map((v, i) => ({ hook: String(v.hook || fallback[i].hook).slice(0, 60),\n  lines: (Array.isArray(v.lines) && v.lines.length ? v.lines : fallback[i].lines).slice(0, 3).map(l => String(l).slice(0, 90)),\n  caption: String(v.caption || fallback[i].caption).slice(0, 150),\n  hashtags: (Array.isArray(v.hashtags) && v.hashtags.length ? v.hashtags : fallback[i].hashtags).slice(0, 6).map(h => '#' + String(h).replace(/^#+/, '').replace(/\\s+/g, '')) }));\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst scripts = '<b>🎬 Video team: 3 scripts for ' + esc(rep.listing.title_fr) + '</b>\\n' + vids.map((v, i) => `\\n<b>${i + 1}. Hook:</b> ${esc(v.hook)}\\nVoice: ${esc(v.lines.join(' '))}\\nCaption: ${esc(v.caption)} ${esc(v.hashtags.join(' '))}`).join('\\n') +\n  '\\n\\nThe videos follow. Post them yourself on TikTok, Reels and Shorts (auto-posting needs each platform\\'s API approval).';\nreturn vids.map((v, i) => ({ json: { n: i + 1, scripts, caption: `${v.caption}\\n${v.hashtags.join(' ')}`.slice(0, 1000),\n  video_body: { images: imgs.length ? imgs : [rep.photo].filter(Boolean), hook: v.hook, lines: v.lines, voice: 'am_adam', price: `${rep.price_cad} CAD`, brand: 'Rangéo' } } }));\n"
+      }
+    },
+    {
+      "id": "i52",
+      "name": "Send scripts",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        9900,
+        -280
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $('Video scripts').first().json.scripts }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "id": "i53",
+      "name": "Make video (server)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9900,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://jarvis-tts:5000/video",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.video_body) }}",
+        "options": {
+          "timeout": 300000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i54",
+      "name": "Send video",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        10120,
+        -100
+      ],
+      "parameters": {
+        "operation": "sendVideo",
+        "chatId": "6203634137",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "caption": "={{ $('Video scripts').item.json.caption }}",
+          "fileName": "={{ 'rangeo-video-' + $('Video scripts').item.json.n + '.mp4' }}"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i55",
+      "name": "Problem reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        160
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { text: '⚠️ ' + $json.problem } }];"
+      }
+    },
+    {
+      "id": "i56",
+      "name": "Send problem",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        160
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "i57",
+      "name": "Can check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2090,
+        140
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "i57c",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "i58",
+      "name": "Identity problem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2300,
+        260
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { text: '⚠️ ' + $json.problem } }];"
+      }
+    },
+    {
+      "id": "i59",
+      "name": "Send identity problem",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2520,
+        260
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook (product idea)": {
+      "main": [
+        [
+          {
+            "node": "Idea input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idea input": {
+      "main": [
+        [
+          {
+            "node": "Answer the caller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer the caller": {
+      "main": [
+        [
+          {
+            "node": "Usable request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Usable request?": {
+      "main": [
+        [
+          {
+            "node": "Link?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Problem reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Problem reply": {
+      "main": [
+        [
+          {
+            "node": "Send problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link?": {
+      "main": [
+        [
+          {
+            "node": "Fetch the page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Identify request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch the page": {
+      "main": [
+        [
+          {
+            "node": "Read the page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the page": {
+      "main": [
+        [
+          {
+            "node": "Identify request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identify request": {
+      "main": [
+        [
+          {
+            "node": "What is it? (free AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What is it? (free AI)": {
+      "main": [
+        [
+          {
+            "node": "Product identity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Product identity": {
+      "main": [
+        [
+          {
+            "node": "Can check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can check?": {
+      "main": [
+        [
+          {
+            "node": "Need a CJ token?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Identity problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identity problem": {
+      "main": [
+        [
+          {
+            "node": "Send identity problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need a CJ token?": {
+      "main": [
+        [
+          {
+            "node": "CJ get token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CJ searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ get token": {
+      "main": [
+        [
+          {
+            "node": "Save token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save token": {
+      "main": [
+        [
+          {
+            "node": "CJ searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ searches": {
+      "main": [
+        [
+          {
+            "node": "CJ product search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ product search": {
+      "main": [
+        [
+          {
+            "node": "Best 3 suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best 3 suppliers": {
+      "main": [
+        [
+          {
+            "node": "Found suppliers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found suppliers?": {
+      "main": [
+        [
+          {
+            "node": "CJ variants",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No suppliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ variants": {
+      "main": [
+        [
+          {
+            "node": "Supplier variant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supplier variant": {
+      "main": [
+        [
+          {
+            "node": "CJ shipping to Canada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ shipping to Canada": {
+      "main": [
+        [
+          {
+            "node": "Supplier costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No suppliers": {
+      "main": [
+        [
+          {
+            "node": "Supplier costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supplier costs": {
+      "main": [
+        [
+          {
+            "node": "SerpApi account (free)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi account (free)": {
+      "main": [
+        [
+          {
+            "node": "Market plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market plan": {
+      "main": [
+        [
+          {
+            "node": "Fresh market check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fresh market check?": {
+      "main": [
+        [
+          {
+            "node": "Google Shopping (Canada)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Shopping (Canada)": {
+      "main": [
+        [
+          {
+            "node": "Google Trends (Canada)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Trends (Canada)": {
+      "main": [
+        [
+          {
+            "node": "Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verdict": {
+      "main": [
+        [
+          {
+            "node": "Listing + video scripts (free AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listing + video scripts (free AI)": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report": {
+      "main": [
+        [
+          {
+            "node": "Memory row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory row": {
+      "main": [
+        [
+          {
+            "node": "Save idea to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save idea to memory": {
+      "main": [
+        [
+          {
+            "node": "Send photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send photo": {
+      "main": [
+        [
+          {
+            "node": "Send report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send report": {
+      "main": [
+        [
+          {
+            "node": "Offer to list?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offer to list?": {
+      "main": [
+        [
+          {
+            "node": "Ask owner: list on Shopify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask owner: list on Shopify?": {
+      "main": [
+        [
+          {
+            "node": "Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision": {
+      "main": [
+        [
+          {
+            "node": "Save decision",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tell owner: decision",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "CJ product photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ product photos": {
+      "main": [
+        [
+          {
+            "node": "Shopify: collections + channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify: collections + channels": {
+      "main": [
+        [
+          {
+            "node": "Product for Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Product for Shopify": {
+      "main": [
+        [
+          {
+            "node": "Shopify: create product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shopify: create product": {
+      "main": [
+        [
+          {
+            "node": "Created + channel known?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Created + channel known?": {
+      "main": [
+        [
+          {
+            "node": "Publish to Online Store",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Listing result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to Online Store": {
+      "main": [
+        [
+          {
+            "node": "Listing result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listing result": {
+      "main": [
+        [
+          {
+            "node": "Send live link",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save listing to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send live link": {
+      "main": [
+        [
+          {
+            "node": "Listed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listed?": {
+      "main": [
+        [
+          {
+            "node": "Video scripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video scripts": {
+      "main": [
+        [
+          {
+            "node": "Send scripts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Make video (server)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make video (server)": {
+      "main": [
+        [
+          {
+            "node": "Send video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

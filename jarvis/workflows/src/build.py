@@ -254,7 +254,10 @@ chain_workflow("JARVIS Voice v1 (screen)", "jarvis-voice-v1.json", "omniroute-ro
 
 # ---------------------------------------------------------------------------
 # Research v1: CJ product research -> finance math -> free-AI notes -> Telegram report.
-def rcode(f): return (here / "research" / f).read_text()
+def inc(t):
+    import re
+    return re.sub(r"^//@include (\S+)\n", lambda m: (here / m.group(1)).read_text(), t, flags=re.M)
+def rcode(f): return inc((here / "research" / f).read_text())
 CJ = "https://developers.cjdropshipping.com/api2.0/v1"
 TOKEN_HDR = {"parameters": [{"name": "CJ-Access-Token", "value": "={{ $json.token }}"}]}
 THROTTLE = {"batching": {"batch": {"batchSize": 1, "batchInterval": 1500}}, "timeout": 30000}
@@ -265,14 +268,41 @@ def ifnode(id_, name, pos, expr):
                                        "operator": {"type": "boolean", "operation": "true", "singleValue": True}}],
                        "combinator": "and"}, "options": {}})
 rn = [
-  node("r0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -260], {"width": 1500, "height": 230, "content":
-      "## JARVIS Research v1 - real products from CJ Dropshipping, sent to your Telegram\n"
-      "Runs every **Monday 10:00** (Toronto) and when you click Execute. Market check: only products that others already sell at 2x+ our cost and whose Google searches in Canada are not falling are sent (🔥 = rising). Searches 3 product themes on CJ (no electronics, cosmetics, kids, food, medical), "
-      "gets the supplier price and **real shipping quotes to Canada**, does the profit math (no AI), lets the free AI add one note per product, and sends you the top 5.\n"
-      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **SerpApi** (Query Auth, name api_key) in *Google Shopping* and *Google Trends*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in *Send product photo*, *Send report* and *Send voice message*. The voice comes from the free Piper service on the server (no credential). Check each one after import: n8n may auto-pick the wrong credential.\n"
-      "All money figures are estimates. Nothing is ordered or published. At the end JARVIS sends a short spoken summary (voice message)."}),
-  node("r1", "Every Monday 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
-       {"rule": {"interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 10}]}}),
+  node("r0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -460], {"width": 1700, "height": 280, "content":
+      "## JARVIS Research v2 - daily products from CJ Dropshipping, sent to your Telegram\n"
+      "Runs **every day at 10:00** (Toronto), and on demand: JARVIS calls the webhook when you say \"send me today's products\", \"resend the products\" or \"what's viral today\" (resends the saved report if today's exists, otherwise runs now).\n"
+      "Your rules: electronics only without batteries or chargers, no beauty, kids, food or medical; anything that may need a certification is marked ⚠️. Every theme is searched in CJ's **Canada and US warehouses first** (fast delivery for Black Friday and Christmas), then China.\n"
+      "Market check with the **free SerpApi plan** (250 searches/month): a daily allowance, 10-day cache, 40 searches kept for your own idea checks, and a warning when it gets low. It never goes over.\n"
+      "Credentials: **CJ API key** (Custom Auth) in *CJ get token*; **SerpApi** (Query Auth, name api_key) in *SerpApi account*, *Google Shopping* and *Google Trends*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in every Telegram node; **JARVIS screen key** (Header Auth) in *Webhook (run or resend)*. Check each one after import.\n"
+      "All money figures are estimates. Nothing is ordered or published. Each day's report is saved in **jarvis_memory** (kinds research and research_report)."}),
+  node("r1", "Every day 10:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0],
+       {"rule": {"interval": [{"field": "cronExpression", "expression": "0 10 * * *"}]}}),
+  node("r32", "Webhook (run or resend)", "n8n-nodes-base.webhook", 2, [-660, 520],
+       {"httpMethod": "POST", "path": "jarvis-research", "authentication": "headerAuth", "responseMode": "responseNode", "options": {}},
+       webhookId="5a0d7c1e-3b0f-4f8e-9a51-2f3e0c9d7a11"),
+  node("r33", "Latest saved report", "n8n-nodes-base.dataTable", 1.1, [-440, 520], {
+       "resource": "row", "operation": "get", "dataTableId": {"__rl": True, "mode": "name", "value": "jarvis_memory"},
+       "filters": {"conditions": [{"keyName": "kind", "condition": "eq", "keyValue": "research_report"}]},
+       "limit": 1, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
+       alwaysOutputData=True, onError="continueRegularOutput"),
+  node("r34", "Run or resend?", "n8n-nodes-base.code", 2, [-220, 520], {"jsCode": rcode("15-decide.js")}),
+  node("r35", "Answer the caller", "n8n-nodes-base.respondToWebhook", 1.1, [0, 520],
+       {"respondWith": "json", "responseBody": "={{ JSON.stringify($json.reply) }}", "options": {}}),
+  ifnode("r36", "Run now?", [220, 520], "={{ $json.action === 'run' }}"),
+  ifnode("r37", "Resend?", [440, 640], "={{ $json.action === 'resend' }}"),
+  node("r38", "Resend saved report", "n8n-nodes-base.code", 2, [660, 640], {"jsCode": rcode("16-resend.js")}),
+  node("r39", "Send saved photo", "n8n-nodes-base.telegram", 1.2, [880, 640], {
+       "operation": "sendPhoto", "chatId": OWNER_CHAT_ID, "binaryData": False, "file": "={{ $json.photo }}",
+       "additionalFields": {"caption": "={{ $json.caption }}", "parse_mode": "HTML"}}, onError="continueRegularOutput"),
+  node("r40", "Resend summary", "n8n-nodes-base.code", 2, [1100, 640], {"jsCode": rcode("17-resend-summary.js")}),
+  node("r41", "Send resent report", "n8n-nodes-base.telegram", 1.2, [1320, 640], {
+       "chatId": OWNER_CHAT_ID, "text": "={{ $json.report }}",
+       "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}, onError="continueRegularOutput"),
+  node("r42", "SerpApi account (free)", "n8n-nodes-base.httpRequest", 4.2, [2760, 420], {
+       "method": "GET", "url": "https://serpapi.com/account.json",
+       "authentication": "genericCredentialType", "genericAuthType": "httpQueryAuth", "options": {"timeout": 20000}},
+       onError="continueRegularOutput", alwaysOutputData=True),
+  ifnode("r43", "Fresh market calls?", [3060, 420], "={{ $json.none !== true }}"),
   node("r2", "Run now (manual)", "n8n-nodes-base.manualTrigger", 1, [0, 200], {}),
   node("r3", "Research plan", "n8n-nodes-base.code", 2, [220, 100], {"jsCode": rcode("1-plan.js")}),
   ifnode("r4", "Need a new CJ token?", [440, 100], "={{ $json.need_token === true }}"),
@@ -284,10 +314,7 @@ rn = [
   node("r7", "Searches", "n8n-nodes-base.code", 2, [1100, 100], {"jsCode": rcode("3-searches.js")}),
   node("r8", "CJ product search", "n8n-nodes-base.httpRequest", 4.2, [1320, 100], {
        "method": "GET", "url": CJ + "/product/list",
-       "sendQuery": True, "queryParameters": {"parameters": [
-           {"name": "pageNum", "value": "1"}, {"name": "pageSize", "value": "={{ $json.page_size }}"},
-           {"name": "productNameEn", "value": "={{ $json.keyword }}"},
-           {"name": "orderBy", "value": "listedNum"}]},
+       "sendQuery": True, "specifyQuery": "json", "jsonQuery": "={{ JSON.stringify($json.query) }}",
        "sendHeaders": True, "headerParameters": TOKEN_HDR, "options": THROTTLE}, onError="continueRegularOutput"),
   node("r9", "Screen products", "n8n-nodes-base.code", 2, [1540, 100], {"jsCode": rcode("4-screen.js")}),
   ifnode("r10", "Nothing found?", [1760, 100], "={{ $json.empty === true }}"),
@@ -300,7 +327,7 @@ rn = [
        "method": "POST", "url": CJ + "/logistic/freightCalculate",
        "sendHeaders": True, "headerParameters": TOKEN_HDR,
        "sendBody": True, "specifyBody": "json",
-       "jsonBody": "={{ JSON.stringify({ startCountryCode: 'CN', endCountryCode: 'CA', products: [{ quantity: 1, vid: $json.vid }] }) }}",
+       "jsonBody": "={{ JSON.stringify({ startCountryCode: $json.warehouse || 'CN', endCountryCode: 'CA', products: [{ quantity: 1, vid: $json.vid }] }) }}",
        "options": THROTTLE}, onError="continueRegularOutput"),
   node("r14", "Finance (no AI)", "n8n-nodes-base.code", 2, [2640, 200], {"jsCode": rcode("6-finance.js")}),
   node("r15", "Shortlist", "n8n-nodes-base.code", 2, [2860, 200], {"jsCode": rcode("7-shortlist.js")}),
@@ -346,13 +373,17 @@ rn = [
        "additionalFields": {"appendAttribution": False, "parse_mode": "HTML"}}),
 ]
 L = lambda a, b, out=0: (a, out, b)
-links = [L("Every Monday 10:00", "Research plan"), L("Run now (manual)", "Research plan"),
+links = [L("Every day 10:00", "Research plan"),
+         L("Webhook (run or resend)", "Latest saved report"), L("Latest saved report", "Run or resend?"), L("Run or resend?", "Answer the caller"),
+         L("Answer the caller", "Run now?"), L("Run now?", "Research plan", 0), L("Run now?", "Resend?", 1), L("Resend?", "Resend saved report", 0),
+         L("Resend saved report", "Send saved photo"), L("Send saved photo", "Resend summary"), L("Resend summary", "Send resent report"), L("Run now (manual)", "Research plan"),
          L("Research plan", "Need a new CJ token?"), L("Need a new CJ token?", "CJ get token", 0), L("Need a new CJ token?", "Searches", 1),
          L("CJ get token", "Save token"), L("Save token", "Searches"), L("Searches", "CJ product search"),
          L("CJ product search", "Screen products"), L("Screen products", "Nothing found?"),
          L("Nothing found?", "Nothing-found report", 0), L("Nothing found?", "CJ variants", 1),
          L("CJ variants", "Pick variant"), L("Pick variant", "CJ shipping to Canada"), L("CJ shipping to Canada", "Finance (no AI)"),
-         L("Finance (no AI)", "Shortlist"), L("Shortlist", "Market check items"), L("Market check items", "Google Shopping (Canada)"), L("Google Shopping (Canada)", "Google Trends (Canada)"), L("Google Trends (Canada)", "Market verdict"), L("Market verdict", "AI notes (free)"), L("AI notes (free)", "Report"),
+         L("Finance (no AI)", "Shortlist"), L("Shortlist", "SerpApi account (free)"), L("SerpApi account (free)", "Market check items"), L("Market check items", "Fresh market calls?"),
+         L("Fresh market calls?", "Google Shopping (Canada)", 0), L("Fresh market calls?", "Market verdict", 1), L("Google Shopping (Canada)", "Google Trends (Canada)"), L("Google Trends (Canada)", "Market verdict"), L("Market verdict", "AI notes (free)"), L("AI notes (free)", "Report"),
          L("Report", "Send product photo"), L("Send product photo", "Summary"), L("Summary", "Send report"), L("Nothing-found report", "Send report"),
          L("Send report", "What JARVIS says"), L("What JARVIS says", "JARVIS voice (Piper, free)"), L("JARVIS voice (Piper, free)", "Send voice message", 0)]
 rc = {}
@@ -360,10 +391,10 @@ for a, out, b in links:
     outs = rc.setdefault(a, {"main": []})["main"]
     while len(outs) <= out: outs.append([])
     outs[out].append({"node": b, "type": "main", "index": 0})
-wfr = {"name": "JARVIS Research v1 (CJ products)", "nodes": rn, "connections": rc,
+wfr = {"name": "JARVIS Research v2 (daily products)", "nodes": rn, "connections": rc,
        "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}
-(here.parent / "jarvis-research-v1.json").write_text(json.dumps(wfr, indent=2) + "\n")
-print("wrote jarvis-research-v1.json")
+(here.parent / "jarvis-research-v2.json").write_text(json.dumps(wfr, indent=2) + "\n")
+print("wrote jarvis-research-v2.json")
 
 
 # Shared memory (n8n data table "jarvis_memory", columns: kind, summary)
@@ -426,7 +457,7 @@ sn = [
        "method": "POST", "url": CJ + "/logistic/freightCalculate",
        "sendHeaders": True, "headerParameters": TOKEN_HDR,
        "sendBody": True, "specifyBody": "json",
-       "jsonBody": "={{ JSON.stringify({ startCountryCode: 'CN', endCountryCode: 'CA', products: [{ quantity: $json.qty, vid: $json.vid }] }) }}",
+       "jsonBody": "={{ JSON.stringify({ startCountryCode: $('Read the reply').first().json.warehouse || 'CN', endCountryCode: 'CA', products: [{ quantity: $json.qty, vid: $json.vid }] }) }}",
        "options": {"timeout": 30000}}, onError="continueRegularOutput"),
   node("s10", "Sample plan", "n8n-nodes-base.code", 2, [2080, Y - 120], {"jsCode": scode("4-plan.js")}),
   ifnode("s11", "Plan OK?", [2300, Y - 120], "={{ !$json.problem }}"),
@@ -513,7 +544,7 @@ chain_workflow("JARVIS Voice v1 (screen)", "jarvis-voice-v1.json", "omniroute-ro
     front=voice_front_mem, tail=voice_tail)
 
 # Research: save a memory row after the report
-wfr_path = here.parent / "jarvis-research-v1.json"
+wfr_path = here.parent / "jarvis-research-v2.json"
 wfr = json.loads(wfr_path.read_text())
 wfr["nodes"] += [
   node("r26", "Memory text", "n8n-nodes-base.code", 2, [4180, 320], {"jsCode": rcode("12-memory.js")}),
@@ -525,7 +556,7 @@ wfr["nodes"] += [
 lnk(wfr["connections"], "Summary", "Memory text"); lnk(wfr["connections"], "Nothing-found report", "Memory text")
 lnk(wfr["connections"], "Memory text", "Save to memory")
 for n in wfr["nodes"]:
-    if n["type"].endswith("stickyNote") and "Research v1" in n["parameters"]["content"]:
+    if n["type"].endswith("stickyNote") and "Research v2" in n["parameters"]["content"]:
         n["parameters"]["content"] += "\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
 wfr_path.write_text(json.dumps(wfr, indent=2) + "\n")
 print("wrote jarvis-voice-v1.json + research memory")
@@ -564,10 +595,10 @@ def send_alert(id_, name, pos):
         onError="continueRegularOutput")
 al = [
   node("x0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -300], {"width": 1300, "height": 210, "content":
-      "## JARVIS Alerts v1 - tells you on Telegram when something breaks\n"
-      "**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v1*). Same problem repeated within 60 min = one alert.\n"
-      "**Bottom:** every day 9:07 and Monday 10:40 (Toronto): checks the free AI, the voice service and that the Monday report went out. Silent when all is fine.\n"
-      "Credentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."}),
+      "## JARVIS Alerts v2 - tells you on Telegram when something breaks or a key stops working\n"
+      "**Top:** any JARVIS workflow that fails sends its error here (each workflow: *Settings -> Error workflow -> JARVIS Alerts v2*). Same problem repeated within 60 min = one alert.\n"
+      "**Bottom:** every day 9:07 and 10:40 (Toronto): checks the free AI, the voice service, the SerpApi and Shopify keys (alarm when a key that worked stops working, or few free searches left) and that the daily 10:00 research went out. Silent when all is fine.\n"
+      "Credentials: **JARVIS Telegram** in both *Send* nodes, **OmniRoute** in *Check AI*, **SerpApi** in *Check SerpApi key*, **Shopify Access Token** in *Check Shopify key*. Save, then Publish. Alerts also go to the memory, so the JARVIS screen announces them."}),
   node("x1", "When a workflow fails", "n8n-nodes-base.errorTrigger", 1, [0, 0], {}),
   node("x2", "Format error alert", "n8n-nodes-base.code", 2, [220, 0], {"jsCode": acode("1-format-error.js")}),
   ifnode("x3", "New problem?", [440, 0], "={{ $json.send === true }}"),
@@ -577,8 +608,16 @@ al = [
        "resource": "row", "operation": "insert", "dataTableId": MEMORY_TABLE,
        "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": []}, "options": {}},
        onError="continueRegularOutput"),
-  node("h1", "Every day 9:07 + Monday 10:40", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 400], {"rule": {"interval": [
-       {"field": "cronExpression", "expression": "7 9 * * *"}, {"field": "cronExpression", "expression": "40 10 * * 1"}]}}),
+  node("h1", "Every day 9:07 + 10:40", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 400], {"rule": {"interval": [
+       {"field": "cronExpression", "expression": "7 9 * * *"}, {"field": "cronExpression", "expression": "40 10 * * *"}]}}),
+  node("h10", "Check SerpApi key", "n8n-nodes-base.httpRequest", 4.2, [560, 300], {
+       "method": "GET", "url": "https://serpapi.com/account.json", "authentication": "genericCredentialType", "genericAuthType": "httpQueryAuth",
+       "options": {"timeout": 20000}}, onError="continueRegularOutput", alwaysOutputData=True),
+  node("h11", "Check Shopify key", "n8n-nodes-base.httpRequest", 4.2, [620, 360], {
+       "method": "POST", "url": "https://rangeo-ca.myshopify.com/admin/api/2026-07/graphql.json",
+       "authentication": "predefinedCredentialType", "nodeCredentialType": "shopifyAccessTokenApi",
+       "sendBody": True, "specifyBody": "json", "jsonBody": "={{ JSON.stringify({ query: '{ shop { name } }' }) }}",
+       "options": {"timeout": 20000}}, onError="continueRegularOutput", alwaysOutputData=True),
   node("h0", "Run health check now", "n8n-nodes-base.manualTrigger", 1, [0, 580], {}),
   node("h2", "Check AI (free combo)", "n8n-nodes-base.httpRequest", 4.2, [240, 480], {
        "method": "POST", "url": "http://omniroute:20128/v1/chat/completions",
@@ -606,25 +645,29 @@ ac = {}
 lnk(ac, "When a workflow fails", "Format error alert"); lnk(ac, "Format error alert", "New problem?")
 lnk(ac, "New problem?", "Send error alert", 0); lnk(ac, "New problem?", "Error memory row", 0)
 lnk(ac, "Error memory row", "Save error to memory")
-for t in ("Every day 9:07 + Monday 10:40", "Run health check now"): lnk(ac, t, "Check AI (free combo)")
-lnk(ac, "Check AI (free combo)", "Check voice service"); lnk(ac, "Check voice service", "Read memory"); lnk(ac, "Read memory", "Evaluate")
+for t in ("Every day 9:07 + 10:40", "Run health check now"): lnk(ac, t, "Check AI (free combo)")
+lnk(ac, "Check AI (free combo)", "Check voice service"); lnk(ac, "Check voice service", "Check SerpApi key")
+lnk(ac, "Check SerpApi key", "Check Shopify key"); lnk(ac, "Check Shopify key", "Read memory"); lnk(ac, "Read memory", "Evaluate")
 lnk(ac, "Evaluate", "Any problem?"); lnk(ac, "Any problem?", "Send health alert", 0); lnk(ac, "Any problem?", "Health memory row", 0)
 lnk(ac, "Health memory row", "Save health to memory")
-(here.parent / "jarvis-alerts-v1.json").write_text(json.dumps({"name": "JARVIS Alerts v1 (errors + health)", "nodes": al, "connections": ac,
+(here.parent / "jarvis-alerts-v2.json").write_text(json.dumps({"name": "JARVIS Alerts v2 (errors + health + keys)", "nodes": al, "connections": ac,
   "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
-print("wrote jarvis-alerts-v1.json")
+print("wrote jarvis-alerts-v2.json")
 
 # ---------------------------------------------------------------------------
 # Briefing v1: daily 8:00 morning briefing on Telegram (text + voice), from memory facts only.
 def bcode(f): return (here / "briefing" / f).read_text()
 bn = [
   node("b0", "README", "n8n-nodes-base.stickyNote", 1, [-60, -260], {"width": 1250, "height": 190, "content":
-      "## JARVIS Briefing v1 - every morning at 6:00 (Toronto) on Telegram\n"
+      "## JARVIS Briefing v2 - every morning at 6:00 (Toronto) on Telegram, and when JARVIS is asked (webhook, Header Auth **JARVIS screen key**)\n"
       "Reads JARVIS memory (reports, approvals waiting, decisions, problems), the free AI phrases it (facts only), then sends a short text and a voice message. "
       "To change the time: open *Every day 6:00* and edit the hour.\n"
-      "Credentials: **OmniRoute** in *AI wording*; **JARVIS Telegram** in *Send briefing* and *Send voice*. Save, then Publish. Settings -> Error workflow -> JARVIS Alerts v1."}),
+      "Credentials: **OmniRoute** in *AI wording*; **JARVIS Telegram** in *Send briefing* and *Send voice*. Save, then Publish. Settings -> Error workflow -> JARVIS Alerts v2."}),
   node("b1", "Every day 6:00", "n8n-nodes-base.scheduleTrigger", 1.2, [0, 0], {"rule": {"interval": [{"field": "cronExpression", "expression": "0 6 * * *"}]}}),
   node("b2", "Send briefing now", "n8n-nodes-base.manualTrigger", 1, [0, 180], {}),
+  node("b12", "Webhook (briefing now)", "n8n-nodes-base.webhook", 2, [0, 360],
+       {"httpMethod": "POST", "path": "jarvis-briefing", "authentication": "headerAuth", "responseMode": "onReceived",
+        "options": {"responseData": "Briefing is on its way to Telegram."}}, webhookId="c4b1e2d0-6a7f-4f5e-8f61-0b9d3a2e7c41"),
   node("b3", "Read memory", "n8n-nodes-base.dataTable", 1.1, [220, 90], {
        "resource": "row", "operation": "get", "dataTableId": MEMORY_TABLE,
        "limit": 30, "orderBy": True, "orderByColumn": "createdAt", "orderByDirection": "DESC"},
@@ -653,13 +696,13 @@ bn = [
        onError="continueRegularOutput"),
 ]
 bc = {}
-for t in ("Every day 6:00", "Send briefing now"): lnk(bc, t, "Read memory")
+for t in ("Every day 6:00", "Send briefing now", "Webhook (briefing now)"): lnk(bc, t, "Read memory")
 lnk(bc, "Read memory", "Briefing facts"); lnk(bc, "Briefing facts", "AI wording (free)"); lnk(bc, "AI wording (free)", "Briefing text")
 lnk(bc, "Briefing text", "Send briefing"); lnk(bc, "Briefing text", "Memory row"); lnk(bc, "Memory row", "Save to memory")
 lnk(bc, "Send briefing", "JARVIS voice"); lnk(bc, "JARVIS voice", "Send voice", 0)
-(here.parent / "jarvis-briefing-v1.json").write_text(json.dumps({"name": "JARVIS Briefing v1 (morning)", "nodes": bn, "connections": bc,
+(here.parent / "jarvis-briefing-v2.json").write_text(json.dumps({"name": "JARVIS Briefing v2 (morning + on request)", "nodes": bn, "connections": bc,
   "settings": {"executionOrder": "v1", "saveManualExecutions": True, "timezone": "America/Toronto"}, "pinData": {}}, indent=2) + "\n")
-print("wrote jarvis-briefing-v1.json")
+print("wrote jarvis-briefing-v2.json")
 
 # ---------------------------------------------------------------------------
 # Shop v1: Rangéo (Shopify) manager - new order alerts + daily stuck-order check.
@@ -670,7 +713,7 @@ sh = [
       "## JARVIS Shop v1 - Rangéo store manager\n"
       "**Top:** every new Shopify order -> Telegram alert (items, total, estimated profit, city) + memory (the JARVIS screen announces it, the morning briefing counts it).\n"
       "**Bottom:** every day 8:45 (Toronto) -> paid orders not shipped after 4 days -> one alert. Silent when all is fine.\n"
-      "Credentials: **Shopify Access Token** (custom app, read orders) in both Shopify nodes; **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Settings -> Error workflow -> JARVIS Alerts v1."}),
+      "Credentials: **Shopify Access Token** (custom app, read orders) in both Shopify nodes; **JARVIS Telegram** in both Send nodes. New product? Add its CJ SKU and cost (USD, product + shipping) to COSTS in *Format order*. Settings -> Error workflow -> JARVIS Alerts v2."}),
   node("p1", "New Shopify order", "n8n-nodes-base.shopifyTrigger", 1, [0, 0], {**SHOP_AUTH, "topic": "orders/create"}, webhookId="ac40b1ee-1832-4af1-adaf-64fe670ef9c9"),
   node("p2", "Format order", "n8n-nodes-base.code", 2, [220, 0], {"jsCode": shcode("1-new-order.js")}),
   node("p3", "Send order alert", "n8n-nodes-base.telegram", 1.2, [440, -80], {
@@ -743,7 +786,7 @@ import shutil
 DOCS = here.parent.parent / "docs" / "workflows"
 UIW = here.parent.parent / "infra" / "server" / "ui" / "workflows"
 UIW.mkdir(parents=True, exist_ok=True)
-TEAM_OF = {"jarvis-": "JARVIS (CEO)", "research": "Product research", "shop": "Analysis / store", "not-built": "Not built yet"}
+TEAM_OF = {"jarvis-": "JARVIS (CEO)", "research": "Product research", "idea": "Analysis / store", "shop": "Analysis / store", "not-built": "Not built yet"}
 groups = {}
 for f in sorted(DOCS.glob("*.md")):
     shutil.copy(f, UIW / f.name)
@@ -753,3 +796,8 @@ for f in sorted(DOCS.glob("*.md")):
 order = ["JARVIS (CEO)", "Product research", "Analysis / store", "Not built yet", "Other"]
 (UIW / "index.json").write_text(json.dumps([{"team": t, "files": groups[t]} for t in order if t in groups], indent=1) + "\n")
 print("wrote ui/workflows (", sum(len(v) for v in groups.values()), "files )")
+
+# ---------------------------------------------------------------------------
+# v2 workflows (owner's update 2026-11-16): brain (agent), idea checker, alerts v2. See build_v2.py.
+import runpy
+runpy.run_path(str(here / "build_v2.py"))

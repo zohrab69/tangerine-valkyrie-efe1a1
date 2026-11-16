@@ -3,7 +3,7 @@ const N = {};
 const run = () => new Function('$input', '$', fs.readFileSync('1-status.js', 'utf8'))({}, n => ({ first: () => N[n][0], all: () => N[n] }))[0].json;
 const ago = h => new Date(Date.now() - h * 3600e3).toISOString();
 N['n8n workflows'] = [{ json: { data: [
-  { id: '1', name: 'JARVIS Telegram v5 (approvals + samples)', active: true }, { id: '2', name: 'JARVIS Research v1 (CJ products)', active: true },
+  { id: '1', name: 'JARVIS Brain v1 (agent: Telegram + screen)', active: true }, { id: '2', name: 'JARVIS Research v1 (CJ products)', active: false }, { id: '6', name: 'JARVIS Research v2 (daily products)', active: true },
   { id: '3', name: 'JARVIS Voice v1 (screen)', active: true }, { id: '4', name: 'JARVIS Shop v1 (Rangéo orders)', active: true }, { id: '5', name: 'JARVIS Alerts v1 (errors + health)', active: true } ] } }];
 N['n8n executions'] = [{ json: { data: [
   { id: 9, workflowId: '2', status: 'error', startedAt: ago(1), mode: 'trigger' }, { id: 8, workflowId: '1', status: 'waiting', startedAt: ago(2), mode: 'webhook' },

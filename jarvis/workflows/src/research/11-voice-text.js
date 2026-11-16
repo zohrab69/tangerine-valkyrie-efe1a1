@@ -11,10 +11,10 @@ if (top.length) {
   const hot = top.filter(p => p.market && p.market.hot).length;
   const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];
   const shortName = best.name.split(/[-,|]/)[0].trim().split(/\s+/).slice(0, 6).join(' ');
-  text = `${greet}, ${NAME}. It's ${hour}. I've just sent this week's product research to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +
+  text = `${greet}, ${NAME}. It's ${hour}. I've just sent today's products to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +
          `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +
-         (hot ? `${hot} look${hot === 1 ? 's' : ''} hot: searches rising and a good price gap. ` : '') + (hits ? `${hits} meet${hits === 1 ? 's' : ''} your targets. ` : 'None met both of your targets this week. ') + `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;
+         (hot ? `${hot} look${hot === 1 ? 's' : ''} hot: searches rising and a good price gap. ` : '') + (hits ? `${hits} meet${hits === 1 ? 's' : ''} your targets. ` : 'None met both of your targets today. ') + `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;
 } else {
-  text = `${greet}, ${NAME}. I ran this week's product research, but no product passed the filters this time. The details are in your Telegram.`;
+  text = `${greet}, ${NAME}. I ran today's product research, but no product passed the filters this time. The details are in your Telegram.`;
 }
 return [{ json: { tts_body: { text: text.slice(0, 1200), lang: 'en', format: 'mp3' }, spoken_text: text } }];

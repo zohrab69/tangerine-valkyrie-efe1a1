@@ -57,7 +57,7 @@ fi
 echo "==> App folder and secrets"
 mkdir -p "$APP/backups"
 cp compose.yml "$APP/compose.yml"
-cp backup.sh "$APP/backup.sh"; chmod 700 "$APP/backup.sh"
+cp backup.sh watchdog.sh offsite-setup.sh "$APP/"; chmod 700 "$APP/backup.sh" "$APP/watchdog.sh" "$APP/offsite-setup.sh"
 cp caddy-config.sh "$APP/caddy-config.sh"; mkdir -p "$APP/jarvis-ui"
 if [ ! -f "$APP/.env" ]; then
   IP=$(curl -fsS -4 https://api.ipify.org || hostname -I | awk '{print $1}')
@@ -90,6 +90,8 @@ docker compose up -d
 
 echo "==> Daily backup at 03:30 (keeps 14 days)"
 echo '30 3 * * * root /opt/jarvis/backup.sh >> /var/log/jarvis-backup.log 2>&1' > /etc/cron.d/jarvis-backup
+echo '*/5 * * * * root /opt/jarvis/watchdog.sh' > /etc/cron.d/jarvis-watchdog
+systemctl enable docker >/dev/null 2>&1 || true
 
 HOST=$(grep '^N8N_HOST=' "$APP/.env" | cut -d= -f2)
 echo

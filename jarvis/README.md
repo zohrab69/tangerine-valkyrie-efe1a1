@@ -9,6 +9,8 @@ install and does not start over.
 |---|---|
 | **This file** | Status and the exact next steps (Phase 1) |
 | [docs/BUSINESS-BRIEF.md](docs/BUSINESS-BRIEF.md) | **Your current goals and decisions: read first** |
+| [docs/UPDATE-2026-11-16.md](docs/UPDATE-2026-11-16.md) | **Latest steps:** daily products, JARVIS agent, 24/7, check my idea |
+| [docs/JARVIS-CONTEXT.md](docs/JARVIS-CONTEXT.md) | What JARVIS knows (its system prompt: plan, Black Friday plan, team, rules) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Org chart, how agents talk, model routing, approvals, data, security |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases 1-10 with done/next checklists |
 | [docs/REALITY-CHECK.md](docs/REALITY-CHECK.md) | What can and cannot be automated, platform rules, Canadian/Quebec law, real costs |

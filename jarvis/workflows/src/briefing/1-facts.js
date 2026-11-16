@@ -1,6 +1,6 @@
 // Morning briefing: collect true facts from JARVIS memory (no guessing), then ask the free AI to phrase them.
 const TZ = 'America/Toronto';
-const rows = $input.all().map(i => i.json || {}).filter(r => r.summary && r.createdAt)
+const rows = $input.all().map(i => i.json || {}).filter(r => r.summary && r.createdAt && r.kind !== 'research_report')
   .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 const now = new Date();
 const local = d => new Date(d).toLocaleString('en-CA', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -17,7 +17,7 @@ const today = now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long', m
 const facts = {
   today,
   latest_research: lastResearch ? { when: local(lastResearch.createdAt), summary: lastResearch.summary.slice(0, 900) } : null,
-  next_research: (dow === 'Monday' && Number(now.toLocaleString('en-CA', { timeZone: TZ, hour: '2-digit', hour12: false })) % 24 < 10) ? 'today at 10:00' : 'next Monday at 10:00',
+  next_research: (Number(now.toLocaleString('en-CA', { timeZone: TZ, hour: '2-digit', hour12: false })) % 24 < 10) ? 'today at 10:00' : 'tomorrow at 10:00',
   waiting_for_owner: waiting.map(r => r.summary.slice(0, 300)),
   decisions_last_24h: decided.map(r => r.summary.slice(0, 300)),
   rangeo_orders_last_24h: orders.map(r => r.summary.slice(0, 300)),

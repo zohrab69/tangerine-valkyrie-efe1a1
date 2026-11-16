@@ -6,6 +6,47 @@ before the store goes live) → 7 (VeraClean) → 8 → 10. The numbers are kept
 
 Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your laptop · `[ ]` planned
 
+## Update 2026-11-16 (owner's doc "Jarvis Multi-Agent Team", plan approved)
+Owner decisions: electronics only **without batteries or chargers**, **no beauty** for now, flag anything that may need a certification;
+research **daily** on the **free SerpApi plan**; **no Keepa** until Amazon starts; Black Friday and Christmas on **Shopify with CJ**,
+preferring **US or Canada warehouses**; the owner opens his Amazon seller account in parallel.
+
+All items below were built and tested in a local n8n 2.45.7 (same version as the server) against simulated CJ, SerpApi, Telegram, Shopify
+and AI services, plus offline unit tests. None has run on the server with real keys yet: `[~]` until the owner imports them.
+- [~] **Daily research + on demand** `jarvis-research-v2.json` (replaces v1): every day 10:00; webhook `/webhook/jarvis-research` (mode auto/run/resend:
+  "send me today's products", "resend the products", "what's viral today"); full report saved in `jarvis_memory` (kind `research_report`) so a resend
+  costs no searches; CJ searches CA and US warehouses first, then CN, shipping quoted from that warehouse; new rules (shared `workflows/src/shared/rules.js`)
+  with ⚠️ certification flags; SerpApi budget: real remaining count from the free account endpoint, daily allowance, 10-day cache, 40 kept for idea checks,
+  warning when low, never goes over
+- [~] **JARVIS as a real agent** `jarvis-brain-v1.json` (replaces Telegram v5 and Voice v1): n8n AI Agent + OmniRoute `jarvis-free` (OpenAI-format credential),
+  conversation memory (12 messages, voice and Telegram share it; resets when n8n restarts), knowledge from `docs/JARVIS-CONTEXT.md` (plan, Black Friday plan,
+  team, rules) + last 12 memory rows; tools: products_today, run_product_research, check_product_idea, memory_search, profit_calculator, morning_briefing,
+  ask_owner_approval (Telegram buttons; webhook `/webhook/jarvis-approval`). Sample flow kept (now quotes from the product's warehouse).
+  Tested: "what's our plan for Black Friday?" (answered from knowledge), "what's selling today?" (called products_today). **Not yet tested with the real free
+  models**: if they pick the wrong tool, the owner will pay for a stronger model (`jarvis-paid`)
+- [~] **Briefing v2** `jarvis-briefing-v2.json`: same 6:00 briefing + webhook `/webhook/jarvis-briefing` for the agent
+- [~] **Check my product idea** `jarvis-idea-v1.json`: Telegram photo / link / "check <product>" or the agent's tool -> what is it (free AI with vision) -> rules ->
+  best 3 CJ suppliers (CA/US first) + shipping -> Google Shopping Canada (incl. Amazon.ca when listed) + Google Trends Canada (cached) -> verdict, price, fees,
+  profit, marketing and FBA estimates, risks -> Approve/Decline (72 h) -> Shopify GraphQL `productSet` (FR title, FR+EN description, CJ photos, price,
+  matching collection, CJ SKU) + publish to Online Store -> live link -> 3 videos. Amazon: waits for seller account + SP-API (separate approval before stock).
+  TikTok Shop: no official data, not checked. Decline and "not allowed" paths tested
+- [~] **Video team v1**: `POST /video` on the voice service (`infra/server/tts/video.py`): 720x1280 MP4 from product photos (blurred background, slow zoom),
+  Kokoro voice-over, captions, brand + price end card; about 6 s to render a 10 s video here. 3 hooks per product (problem, demo, gift), sent on Telegram
+  with caption + hashtags. The owner posts them (auto-posting needs each platform's API approval). Needs a voice-service rebuild (voice-setup.sh)
+- [~] **Alerts v2** `jarvis-alerts-v2.json`: + SerpApi and Shopify key checks (alarm only when a key that worked stops working), few-searches-left warning,
+  daily 10:40 check that research went out
+- [~] **24/7** `infra/server/ops-247.sh`: Docker at boot, all containers `restart: unless-stopped` (already), watchdog every 5 min (`watchdog.sh`: restarts
+  unhealthy/stopped containers and a frozen n8n), nightly backup now also exports workflows as JSON and, after `offsite-setup.sh`, sends the backup
+  **encrypted** (AES-256, key kept by the owner) to the owner's Telegram as the off-server copy. Outside watchdog: UptimeRobot on `https://n8n.<ip>.sslip.io/healthz/readiness`
+- [~] Command center follows the new workflows (Brain, Idea, Research v2, Alerts v2) and the new memory kinds (idea, listing)
+- [ ] Owner: SerpApi key (free) -> credential **SerpApi** (Query Auth, name `api_key`)
+- [ ] Owner: Shopify custom app with scopes `read_orders`, `write_products`, `read_publications`, `write_publications` -> credential **Shopify Access Token**
+- [ ] Owner: OpenAI-type credential **OmniRoute (OpenAI format)** (OmniRoute API key, Base URL `http://omniroute:20128/v1`) for the agent
+- [ ] Owner: deploy (scp + `voice-setup.sh` for the video service, `ops-247.sh`, `offsite-setup.sh`), import Research v2, Brain v1, Idea v1, Briefing v2,
+  Alerts v2; unpublish Research v1, Telegram v5, Voice v1, Briefing v1, Alerts v1; set every workflow's Error workflow to Alerts v2; UptimeRobot monitor
+- [ ] Real-model test of the agent (the two test questions) and of one idea check end to end; then pick 2-3 Black Friday products (US/CA warehouse)
+- [ ] Later: Amazon SP-API (listing + FBA stock order with its own approval), Keepa only when Amazon starts, auto-posting when platform APIs are approved
+
 ## Phase 1: Infrastructure (current)
 - [x] Docker Desktop, WSL 2, Compose, n8n on :5678, volume `n8n_data`, owner account *(as you reported it)*
 - [x] OpenAI API key, US$10 credit, auto-recharge off *(as you reported it)*

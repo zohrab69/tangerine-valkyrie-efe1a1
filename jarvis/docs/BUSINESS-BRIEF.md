@@ -1,4 +1,4 @@
-# Owner brief (updated 2026-11-06: Shopify + Amazon first)
+# Owner brief (updated 2026-11-16: Shopify + Amazon first; Black Friday on Shopify)
 
 Read this first in every session. It is the owner's current intent, in plain words.
 
@@ -31,6 +31,11 @@ Trading stays paused.
   This is separate from the AI cap in `config/budget.json`.
 - **JARVIS voice (owner choice 2026-11-09):** Kokoro `am_adam` (American male), free and running on the server.
 - **Store name (owner choice 2026-11-11): Rangéo** (Shopify address: rangeo-ca.myshopify.com). Owner tests the whole flow with a real order to himself instead of a separate sample.
+- **Owner decisions 2026-11-16 (plan approved):** electronics allowed only **without batteries or chargers** (replaces "no electronics");
+  **no beauty** for now; flag anything that may need a certification. Research runs **daily** on the **free SerpApi plan** (250 searches/month).
+  **No Keepa** until the Amazon store starts. **Black Friday and Christmas: Shopify with CJ**, preferring CJ **US or Canada warehouses**.
+  The owner opens his **Amazon seller account in parallel**. JARVIS becomes a real agent (n8n AI Agent, free models); if the free models
+  choose tools badly, the owner agrees to pay for a stronger model. What JARVIS knows: `docs/JARVIS-CONTEXT.md`.
 - **Backbone:** keep **n8n**, which is free, already installed, and has the integrations needed. Use separate services only
   where n8n cannot do the job alone: phone calls, video rendering, social APIs.
 - **Cloud server now (owner decision 2026-11-06):** Hetzner CX23 (about €6/month), set up from `infra/server/`. The laptop is too short on RAM for OmniRoute.

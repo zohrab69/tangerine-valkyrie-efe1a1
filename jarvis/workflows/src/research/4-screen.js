@@ -1,10 +1,12 @@
-// Screen CJ search results (no AI): excluded categories, price band, de-duplicate, competition check, rank.
+// Screen CJ search results (no AI): owner's product rules, price band, de-duplicate, competition check, rank.
 // Demand = how many stores already list the product on CJ (CJ returns results sorted by it), plus
-// CJ's sales/order count when the API provides one. Keeps the best 8.
-const EXCLUDE = /(spot ?light|flash ?light|\blights?\b|rechargeable|solar|glow|electr|usb|batter|charg|bluetooth|earphone|headphone|speaker|camera|phone|smart ?watch|\bled\b|lamp|cosmetic|make ?up|lipstick|mascara|skin ?care|serum|cream|perfume|nail polish|hair dye|toy|\bkid|child|baby|infant|toddler|food|snack|supplement|vitamin|medical|medicine|knife set|weapon|vape|e-cig|cbd|lithium)/i;
+// CJ's sales/order count when the API provides one. Products in a CA or US warehouse come first
+// (holiday season: fast delivery). Keeps the best 12.
+//@include shared/rules.js
 const MAX_COST_USD = 20;   // supplier price ceiling, before shipping
 const searches = $('Searches').all().map(i => i.json);
 const out = [], seen = new Set(), notes = [];
+let excludedCount = 0;
 $input.all().forEach((item, idx) => {
   const r = item.json || {};
   if (r.error) { notes.push(`search "${searches[idx]?.keyword}": request failed (${(r.error.message || JSON.stringify(r.error)).slice(0, 120)})`); return; }
@@ -17,7 +19,9 @@ $input.all().forEach((item, idx) => {
     const name = p.productNameEn || p.nameEn || p.productName || '';
     const cat = p.categoryName || p.threeCategoryName || '';
     const price = parseFloat(String(p.sellPrice ?? p.nowPrice ?? '').split('-')[0]);
-    if (!name || EXCLUDE.test(name + ' ' + cat) || !(price > 0) || price > MAX_COST_USD) continue;
+    if (!name || !(price > 0) || price > MAX_COST_USD) continue;
+    const rule = checkRules(name + ' ' + cat);
+    if (rule.excluded) { excludedCount++; continue; }
     seen.add(pid);
     let image = p.productImage || p.bigImage || p.image || '';
     if (typeof image === 'string' && image.trim().startsWith('[')) { try { image = JSON.parse(image)[0] || ''; } catch { image = ''; } }
@@ -27,7 +31,8 @@ $input.all().forEach((item, idx) => {
     out.push({ pid, name: name.slice(0, 120), category: cat, sku: p.productSku || p.sku || '',
                image: /^https:\/\//.test(image) ? image : '', list_price_usd: price,
                listed_by_stores: Number(p.listedNum ?? p.listedShopNum ?? 0) || 0, sold_count: sold,
-               keyword: searches[idx]?.keyword || '', token: searches[0]?.token });
+               keyword: searches[idx]?.keyword || '', warehouse: searches[idx]?.warehouse || 'CN',
+               certification: rule.certification, token: searches[0]?.token });
   }
 });
 const demand = x => x.listed_by_stores + 2 * x.sold_count;
@@ -46,7 +51,9 @@ out.forEach((x, i) => {
   x.competition = n < 20 ? 'unproven' : n < 2000 ? 'healthy' : n < 8000 ? 'crowded' : 'saturated';
 });
 const BAND = { healthy: 0, crowded: 1, unproven: 2, saturated: 3 };
-out.sort((a, b) => (BAND[a.competition] - BAND[b.competition]) || (a.similar_count >= 4) - (b.similar_count >= 4) || b.demand_score - a.demand_score);
-const keep = out.slice(0, 10);
+const local = x => (x.warehouse === 'CA' || x.warehouse === 'US') ? 0 : 1;
+out.sort((a, b) => (BAND[a.competition] >= 2) - (BAND[b.competition] >= 2) || local(a) - local(b) || (BAND[a.competition] - BAND[b.competition]) || (a.similar_count >= 4) - (b.similar_count >= 4) || b.demand_score - a.demand_score);
+const keep = out.slice(0, 12);
+if (excludedCount) notes.push(excludedCount + ' product(s) skipped by your rules (batteries/chargers, beauty, kids, food, medical)');
 if (!keep.length) return [{ json: { empty: true, notes, token: searches[0]?.token } }];
 return keep.map(p => ({ json: { ...p, screen_notes: notes } }));

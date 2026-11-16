@@ -1,13 +1,13 @@
-# JARVIS voice, free and offline on this server:
+# JARVIS voice (and short product videos), free and offline on this server:
 #   English: Kokoro (natural, human-like; Apache-2.0 model)   French: Piper (male "tom")
 FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir piper-tts==1.8.0 kokoro-onnx==0.6.1
 RUN mkdir /voices && python -m piper.download_voices en_GB-alan-medium fr_FR-tom-medium --download-dir /voices
 # Kokoro model (quantized, ~90 MB) + voice pack (~28 MB), official kokoro-onnx release files, with retries
 COPY fetch_models.py /tmp/fetch_models.py
 RUN python /tmp/fetch_models.py && rm /tmp/fetch_models.py
-COPY server.py /app/server.py
+COPY server.py video.py /app/
 RUN useradd -r -u 10001 tts
 USER tts
 ENV JARVIS_VOICE=am_adam

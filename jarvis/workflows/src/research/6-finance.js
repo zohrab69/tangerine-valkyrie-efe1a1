@@ -37,13 +37,15 @@ $input.all().forEach((item, idx) => {
   if (p.competition === 'unproven') flags.push('unproven demand (few stores sell it yet)');
   if (p.competition === 'crowded') flags.push('crowded: ' + p.listed_by_stores + ' stores already sell it');
   if (p.competition === 'saturated') flags.push('saturated: ' + p.listed_by_stores + ' stores sell it, hard to stand out');
+  (p.certification || []).forEach(c => flags.push('⚠️ ' + c));
   if (p.similar_count >= 4) flags.push(p.similar_count + ' near-identical copies on CJ');
   const days = ship ? maxDays(ship) : 99;
   const meets_target = !!ship && profit >= F.target_profit_cad && days <= F.target_days;
   const misses = [];
   if (profit < F.target_profit_cad) misses.push('profit under ' + F.target_profit_cad + ' CAD');
   if (days > F.target_days) misses.push('delivery over ' + F.target_days + ' days');
-  out.push({ json: { ...p, meets_target, target_misses: misses, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),
+  const local_warehouse = p.warehouse === 'CA' || p.warehouse === 'US';
+  out.push({ json: { ...p, local_warehouse, meets_target, target_misses: misses, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),
                      est_profit_cad: profit, margin_pct: Math.round(profit / price * 100), flags,
                      estimate_note: 'Estimates from CJ quotes; excludes sales tax, duties and samples.' } });
 });

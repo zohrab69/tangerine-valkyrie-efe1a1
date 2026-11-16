@@ -1,0 +1,1974 @@
+{
+  "name": "JARVIS Brain v1 (agent: Telegram + screen)",
+  "nodes": [
+    {
+      "id": "k0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -700
+      ],
+      "parameters": {
+        "width": 1900,
+        "height": 330,
+        "content": "## JARVIS Brain v1 - JARVIS as a real agent (Telegram + JARVIS screen)\nReplaces **Telegram v5** and **Voice v1**: unpublish both, then publish this one (one Telegram trigger per bot, one /jarvis-voice webhook).\n**Brain:** AI Agent + OmniRoute free models (model `jarvis-free`) + conversation memory (last 12 messages, voice and Telegram share it; it resets when n8n restarts) + knowledge (docs/JARVIS-CONTEXT.md, built in) + the last 12 rows of **jarvis_memory**.\n**Tools (the teams):** products today, run research, check a product idea, memory search, profit calculator, morning briefing, ask the owner's approval.\n**Shortcuts without AI:** a photo, a link or \"check <product>\" on Telegram goes to the idea checker; \"send/resend the products\" goes straight to research; a reply \"sample\" to a product photo prices a sample (lower part).\n**Credentials:** *OmniRoute chat model*: an **OpenAI** credential named **OmniRoute (OpenAI format)** (API key = your OmniRoute key; Base URL `http://omniroute:20128/v1`). All Telegram nodes: **JARVIS Telegram**. *Webhook (JARVIS screen)*, *Webhook (approval request)* and every tool / HTTP node that calls `localhost:5678/webhook`: **JARVIS screen key** (Header Auth). *CJ get token*: **CJ API key**.\nMoney, publishing, prices, posting and contacting people always go through Approve/Decline buttons."
+      }
+    },
+    {
+      "id": "k1",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -700,
+        0
+      ],
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "webhookId": "9b2f4c1e-7d3a-4e8b-a6f0-3c5d1e2b7a90"
+    },
+    {
+      "id": "k2",
+      "name": "Only the owner?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -480,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "o1",
+              "leftValue": "={{ String($json.message?.chat?.id ?? '') }}",
+              "rightValue": "6203634137",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "o2",
+              "leftValue": "={{ !!(($json.message?.text ?? '') + ($json.message?.caption ?? '')) || !!($json.message?.photo?.length) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "k3",
+      "name": "Sample request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -260,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "k3c",
+              "leftValue": "={{ /CJ SKU\\s+\\S+/.test(($json.message?.reply_to_message?.caption ?? '') + ' ' + ($json.message?.caption ?? '')) && !/^\\s*(check|vérifie|verifie)\\b/i.test($json.message?.text ?? '') || /^\\s*(sample|échantillon|echantillon)\\b/i.test($json.message?.text ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "k4",
+      "name": "Webhook (JARVIS screen)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-voice",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "3e7a9c2b-1f4d-4b6e-9a8c-5d2e0f1b3c47"
+    },
+    {
+      "id": "k5",
+      "name": "Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        150
+      ],
+      "parameters": {
+        "jsCode": "// One request format for both doors: Telegram (owner's chat) and the JARVIS screen (voice or typed).\n// Also decides the route: idea (a product to check), products (send/resend today's products) or chat (the agent).\nconst j = $input.first().json || {};\nconst OWNER = '6203634137';\nlet channel, text, lang = 'en', chat_id = OWNER, photo = null, history = [];\nif (j.message) {                                   // Telegram\n  channel = 'telegram';\n  const m = j.message;\n  text = String(m.text || m.caption || '').trim();\n  chat_id = String(m.chat && m.chat.id || OWNER);\n  if (Array.isArray(m.photo) && m.photo.length) {\n    const sorted = [...m.photo].sort((a, b) => (a.file_size || a.width || 0) - (b.file_size || b.width || 0));\n    const mid = sorted.find(p => (p.width || 0) >= 480) || sorted[sorted.length - 1];\n    photo = mid.file_id;\n  }\n  if (/[àâçéèêëîïôûùüÿœ]|\\b(bonjour|merci|produits?|vérifie|est-ce|combien|quoi)\\b/i.test(text)) lang = 'fr';\n} else {                                           // JARVIS screen (Caddy adds the secret header)\n  channel = 'voice';\n  const b = j.body || {};\n  text = String(b.text || '').trim();\n  lang = b.lang === 'fr' ? 'fr' : 'en';\n  history = Array.isArray(b.history) ? b.history.slice(-4) : [];\n}\ntext = text.slice(0, 2000);\nconst url = (text.match(/https?:\\/\\/\\S+/) || [null])[0];\nconst CHECK = /^\\s*(check|vérifie|verifie|analyse|analyze|research|is this (a )?good|what about|idée|idea)\\b[:\\s-]*/i;\nconst PRODUCTS = /\\b(send|resend|show|give)( me)?( the| today'?s| todays| the latest)? (top )?products\\b|\\b(today'?s|todays|daily) products\\b|\\b(envoie|renvoie|montre)(-moi)? (les )?produits\\b|\\bproduits du jour\\b/i;\nlet route = 'chat', idea = null;\nif (channel === 'telegram' && photo) { route = 'idea'; idea = { kind: 'photo', file_id: photo, text: text || null }; }\nelse if (channel === 'telegram' && url) { route = 'idea'; idea = { kind: 'link', url, text: text.replace(url, '').trim() || null }; }\nelse if (channel === 'telegram' && CHECK.test(text) && text.replace(CHECK, '').trim().length >= 3) { route = 'idea'; idea = { kind: 'name', text: text.replace(CHECK, '').trim() }; }\nelse if (PRODUCTS.test(text)) route = 'products';\nconst resend = /\\b(resend|again|renvoie)\\b/i.test(text);\nreturn [{ json: { channel, text, lang, chat_id, route, idea, history, session: 'owner',\n                  products_mode: resend ? 'resend' : 'auto', received_at: new Date().toISOString() } }];\n"
+      }
+    },
+    {
+      "id": "k6",
+      "name": "Product idea?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        150
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "k6c",
+              "leftValue": "={{ $json.route === 'idea' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "k7",
+      "name": "Products request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "k7c",
+              "leftValue": "={{ $json.route === 'products' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "k8",
+      "name": "Research: send products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-research",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ mode: $json.products_mode }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "k9",
+      "name": "Read memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        420
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "limit": 14,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "k10",
+      "name": "Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// JARVIS's system prompt: what he knows (docs/JARVIS-CONTEXT.md, built in), recent memory, and how to answer here.\nconst CONTEXT = \"## Who and what\\n- Owner: Zohrab, in Quebec, Canada. He talks to you (JARVIS, the AI chief operating officer) by voice on the JARVIS screen and on Telegram.\\n- Businesses, in order: 1) **Rang\\u00e9o**, a Shopify store selling in Canada (rangeo-ca.myshopify.com), dropshipping with CJ Dropshipping; Amazon.ca later.\\n  2) **VeraClean**, a new cleaning company in Montr\\u00e9al/Laval (not automated yet). Trading is paused.\\n- Starting budget: 200 CAD for the store. AI runs on free models through OmniRoute; paid models only when the owner agrees.\\n\\n## Where things stand (true facts)\\n- Rang\\u00e9o is set up: Shopify Payments active, CJ app connected (order sync, auto-pay by card, tracking). First product listed:\\n  Vehicle Visor Organizer (CJ, China warehouse, 39.99 CAD; the market check showed similar visors at about 17-28 CAD, so its price is too high).\\n  Next store steps: pick better products (US/Canada warehouse) for Black Friday and the owner's real test order.\\n- Every day at 10:00 (Toronto) you send the top 5 products from CJ to Telegram (photos, costs, shipping to Canada, profit estimate,\\n  market check). The owner can ask you to resend them or run research again at any time.\\n- Morning briefing on Telegram every day at 6:00. Health checks and error alerts on Telegram.\\n- The owner can send you a product idea on Telegram (link, photo or name) and you send back a full report with Approve and Decline buttons.\\n  On approval you list it on Shopify (when the Shopify key is connected) and the video team prepares 3 short videos.\\n- The owner is opening his Amazon seller account in parallel. Amazon listings and FBA stock orders wait for the seller account and SP-API.\\n\\n## Black Friday and Christmas plan (owner decision 2026-11-16)\\n- Sell on **Shopify with CJ dropshipping**, preferring CJ products already in a **US or Canada warehouse** (delivery in about 3-8 days instead of 8-15).\\n- Black Friday is Friday 27 November 2026, Cyber Monday 30 November. Christmas: last safe order day is about 15 December for US/Canada warehouse items.\\n- Steps: 1) owner's test order now; 2) pick 2-3 products from the daily research or his own ideas that pass the market check (others sell at 2x+ our cost,\\n  searches not falling), with 10+ CAD profit and 10 days or less delivery; 3) list them with original FR+EN titles and photos (owner approves each);\\n  4) 3 short videos per product for TikTok, Reels and Shorts (owner posts); 5) a small ad test only with the owner's approval (suggest 5 days x 10 CAD);\\n  6) Black Friday offer: a bundle or a 15-20% discount the owner approves; 7) after Black Friday keep the winners for Christmas, drop the rest.\\n- No Keepa (paid Amazon data) until the Amazon store starts.\\n\\n## Product rules (owner decisions)\\n- Electronics only **without batteries or chargers**. **No beauty** for now. No kids' products, food, supplements, medical items or weapons.\\n- Flag anything that may need a certification (CSA/cUL for plug-in items, ISED for radio devices, food-contact reports, safety gear).\\n- Targets: 10+ CAD profit per sale and delivery 10 days or less. Competition bands (stores selling it on CJ): under 20 unproven, 20-1999 healthy, 2000-7999 crowded, 8000+ saturated.\\n\\n## The team (your tools)\\n- Product scout + market analyst: daily research (tool products_today, run_product_research). SerpApi free plan: 250 searches a month, cached; never go over.\\n- Idea checker: full report on one product the owner names (tool check_product_idea). Results arrive on Telegram.\\n- Store manager: Shopify orders and stuck orders (facts in memory, kind \\\"order\\\").\\n- Finance: profit math (tool profit_calculator). Fees used: Shopify Payments about 2.9% + 0.30 CAD, 5% returns allowance, USD to CAD 1.40.\\n- Briefing: tool morning_briefing sends a briefing to Telegram now.\\n- Approvals: tool ask_owner_approval sends Approve/Decline buttons on Telegram.\\n- Video team: 3 short videos per approved product, sent on Telegram with captions and hashtags; the owner posts them.\\n\\n## Rules you always follow\\n- Ask the owner (tool ask_owner_approval, or the product flow's own buttons) before spending money, publishing products, changing prices,\\n  ordering stock or samples, posting on social media, or contacting new people. Never claim something was done unless a tool result or memory says so.\\n- Never ask for passwords, API keys or card numbers. Keys are added by the owner in n8n only.\\n- Honest limits: there is no official TikTok, TikTok Shop or Amazon trend or price data; you do not scrape those sites (it breaks their terms).\\n  Amazon.ca prices seen in Google Shopping are used when available. If you cannot do something, say so and suggest what to build next.\\n- Answer in the owner's language (English or French). Keep spoken answers short and natural.\\n\";\nconst r = $('Request').first().json;\nconst TZ = 'America/Toronto';\nconst now = new Date();\nconst local = d => new Date(d).toLocaleString('en-CA', { timeZone: TZ, dateStyle: 'medium', timeStyle: 'short' });\nconst ago = d => { const m = Math.round((now - new Date(d)) / 60000); return m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago'; };\nconst rows = $input.all().map(i => i.json || {}).filter(x => x.summary && x.kind !== 'research_report');\nconst memory = rows.slice(0, 12).map(x => `[${x.createdAt ? local(x.createdAt) + ', ' + ago(x.createdAt) : '?'}] ${x.kind || 'note'}: ${String(x.summary).slice(0, 700)}`).join('\\n');\nconst howToAnswer = r.channel === 'voice'\n  ? 'The owner is SPEAKING to you on the JARVIS screen; your answer is read aloud. Answer in at most 3 short, natural sentences (max 60 words), no lists, no markdown, no emojis. Speech recognition sometimes mishears words: use the conversation to understand what was meant.'\n  : 'The owner is writing to you on Telegram. Answer clearly and briefly (max 150 words). Plain text, short lines, no markdown tables, no ** or #.';\nconst lang = r.lang === 'fr' ? 'Answer in French.' : 'Answer in English unless the owner writes in French.';\nconst system = [\n  'You are JARVIS, the AI chief operating officer of the owner\\'s businesses. Calm, concise, practical, a little warm. Call the owner Zohrab now and then.',\n  'Current date and time (Toronto): ' + local(now) + ', ' + now.toLocaleDateString('en-CA', { timeZone: TZ, weekday: 'long' }) + '.',\n  howToAnswer, lang,\n  'Use your tools when the owner asks for something they cover: products_today (today\\'s products, what is selling or viral today: it also sends them to Telegram), run_product_research (new research on themes), ' +\n  'check_product_idea (one product the owner names), memory_search (what happened: orders, samples, approvals, research, errors), profit_calculator (price and profit math), ' +\n  'morning_briefing (send a briefing to Telegram now), ask_owner_approval (anything that spends money, publishes, changes prices, orders, posts or contacts people). ' +\n  'Call at most 2 tools per answer. Only state numbers that come from a tool result, the memory below or the knowledge below. Never say something was done, sent or bought unless a tool result says so.',\n  'If you cannot do something yet, say so in one sentence and suggest what to build next.',\n  '=== WHAT YOU KNOW ===\\n' + CONTEXT,\n  '=== RECENT JARVIS ACTIVITY (newest first, from memory) ===\\n' + (memory || '(nothing recorded yet)'),\n].join('\\n\\n');\nconst hist = (r.history || []).map(h => `Owner: ${String(h && h.you || '').slice(0, 300)} | JARVIS: ${String(h && h.jarvis || '').slice(0, 300)}`).join('\\n');\nreturn [{ json: { system, prompt: r.text + (r.channel === 'voice' && hist ? '' : ''), session: r.session, channel: r.channel } }];\n"
+      }
+    },
+    {
+      "id": "k11",
+      "name": "JARVIS agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1120,
+        420
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.system }}",
+          "maxIterations": 6,
+          "enableStreaming": false
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "k12",
+      "name": "OmniRoute chat model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        920,
+        680
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "jarvis-free"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "baseURL": "http://omniroute:20128/v1",
+          "temperature": 0.3,
+          "maxTokens": 700,
+          "timeout": 90000,
+          "maxRetries": 1
+        }
+      }
+    },
+    {
+      "id": "k13",
+      "name": "Conversation memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1060,
+        680
+      ],
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Context').first().json.session }}",
+        "contextWindowLength": 12
+      }
+    },
+    {
+      "id": "k14",
+      "name": "products_today",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        680
+      ],
+      "parameters": {
+        "toolDescription": "Today's top 5 products (what is selling or viral today). Resends today's saved report to the owner's Telegram, or runs product research now if there is none today. Returns the product list. No input needed.",
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-research",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"mode\": \"auto\"}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "k15",
+      "name": "run_product_research",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        680
+      ],
+      "parameters": {
+        "toolDescription": "Run new product research now on CJ (US/Canada warehouses first) with a market check; the top 5 arrive on Telegram in a few minutes. Optional themes, e.g. 'phone stand, christmas decoration'.",
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-research",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ mode: 'run', keywords: String($fromAI('themes', 'Up to 3 product themes separated by commas, or an empty string for the daily rotation', 'string') || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 3) }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "k16",
+      "name": "check_product_idea",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        680
+      ],
+      "parameters": {
+        "toolDescription": "Check one product the owner names (name or link): virality (Google searches in Canada), competitor prices (Google Shopping Canada incl. Amazon.ca), the best 3 CJ suppliers, costs, profit, risks. The full report with Approve/Decline buttons arrives on Telegram in 1-3 minutes.",
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-idea",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'name', text: $fromAI('product', 'The product name or link to check, as the owner said it', 'string') }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "k17",
+      "name": "memory_search",
+      "type": "n8n-nodes-base.dataTableTool",
+      "typeVersion": 1.1,
+      "position": [
+        1620,
+        680
+      ],
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Search JARVIS's memory by kind. Kinds: research (daily products), order (Shopify orders), sample, sample_pending, approval, approval_pending, idea (product idea checks), listing (products put on Shopify), briefing, error. Returns the 8 newest rows of that kind.",
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "kind",
+              "condition": "eq",
+              "keyValue": "={{ $fromAI('kind', 'One kind: research, order, sample, approval, approval_pending, idea, listing, briefing or error', 'string') }}"
+            }
+          ]
+        },
+        "limit": 8,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      }
+    },
+    {
+      "id": "k18",
+      "name": "profit_calculator",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        1760,
+        680
+      ],
+      "parameters": {
+        "description": "Price and profit math for one product: supplier cost and shipping in USD, optional selling price in CAD. Returns landed cost, suggested price, fees, profit and margin.",
+        "language": "javaScript",
+        "jsCode": "// Tool for the agent: price and profit math (same rules as research \"Finance\").\nconst q = typeof query === 'string' ? JSON.parse(query || '{}') : (query || {});\nconst usdToCad = 1.40;\nconst cost = Number(q.cost_usd || 0), ship = Number(q.shipping_usd || 0);\nconst landed = (cost + ship) * usdToCad;\nlet price = Number(q.price_cad || 0);\nif (!(price > 0)) price = Math.ceil(Math.max(landed * 2.5, landed + 12)) - 0.01;\nconst fees = price * 0.029 + 0.30, returns = price * 0.05;\nconst ads = q.include_ads === false ? 0 : price * 0.20;\nconst profit = price - landed - fees - returns - ads;\nreturn JSON.stringify({ landed_cad: +landed.toFixed(2), price_cad: +price.toFixed(2), payment_fees_cad: +fees.toFixed(2), returns_allowance_cad: +returns.toFixed(2),\n  marketing_allowance_cad: +ads.toFixed(2), profit_cad: +profit.toFixed(2), margin_pct: Math.round(profit / price * 100),\n  note: 'Estimate. USD to CAD 1.40; Shopify Payments ~2.9% + 0.30; 5% returns; 20% marketing allowance unless include_ads=false.' });\n",
+        "specifyInputSchema": true,
+        "schemaType": "manual",
+        "inputSchema": "{\n \"type\": \"object\",\n \"properties\": {\n  \"cost_usd\": {\n   \"type\": \"number\",\n   \"description\": \"Supplier price in USD\"\n  },\n  \"shipping_usd\": {\n   \"type\": \"number\",\n   \"description\": \"Shipping to Canada in USD\"\n  },\n  \"price_cad\": {\n   \"type\": \"number\",\n   \"description\": \"Selling price in CAD (0 = suggest one)\"\n  },\n  \"include_ads\": {\n   \"type\": \"boolean\",\n   \"description\": \"Keep a 20% marketing allowance (default true)\"\n  }\n },\n \"required\": [\n  \"cost_usd\",\n  \"shipping_usd\"\n ]\n}"
+      }
+    },
+    {
+      "id": "k19",
+      "name": "morning_briefing",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        680
+      ],
+      "parameters": {
+        "toolDescription": "Send the owner a briefing on Telegram now (text and voice): latest research, approvals waiting, decisions, orders and problems. No input needed.",
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-briefing",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"from\": \"agent\"}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "k20",
+      "name": "ask_owner_approval",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2040,
+        680
+      ],
+      "parameters": {
+        "toolDescription": "Ask the owner to approve something that spends money, publishes, changes a price, orders stock or samples, posts on social media or contacts people. Sends Approve/Decline buttons on Telegram; the answer is saved in memory (kind approval). Nothing is done automatically.",
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-approval",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $fromAI('title', 'Short title of what needs approval', 'string'), details: $fromAI('details', 'What exactly would be done, why, and the risks', 'string'), amount_cad: $fromAI('amount_cad', 'Money involved in CAD, 0 if none', 'number') }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "k21",
+      "name": "Final reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Final answer for Telegram (plain text) and for the screen (spoken + shown). Works for the agent's\n// answer, for \"send me the products\" (research webhook reply) and for errors.\nconst r = $('Request').first().json;\nconst j = $input.first().json || {};\nconst fr = r.lang === 'fr';\nlet answer = '', ok = true, products = [];\nif (j.output !== undefined) answer = String(j.output || '');\nelse if (j.message && j.action) { answer = j.message; products = Array.isArray(j.products) ? j.products : []; }\nelse if (j.error) { ok = false; }\nanswer = answer.replace(/\\*\\*|__|^#+\\s*/gm, '').replace(/<think>[\\s\\S]*?<\\/think>/g, '').trim();\nif (!answer) { ok = false; answer = fr ? \"Désolé, je n'ai pas pu répondre pour le moment. Réessayez dans une minute.\" : \"Sorry, I couldn't get an answer right now. Please try again in a minute.\"; }\nconst telegram_text = (products.length ? answer + '\\n' + products.slice(0, 5).join('\\n') : answer).slice(0, 4000);\nconst spoken = answer.replace(/https?:\\/\\/\\S+/g, 'the link on Telegram').replace(/[•*_`#>]/g, '').replace(/\\s+/g, ' ').slice(0, 700);\nreturn [{ json: { channel: r.channel, chat_id: r.chat_id, telegram_text,\n  voice_response: { ok, spoken, summary: products.length ? products.slice(0, 5).join(' · ') : null, steps: products.slice(0, 5),\n                    needs_approval: false, answered_by: 'JARVIS agent', model: 'jarvis-free', cost_cad: 0, error: ok ? null : 'no answer' } } }];\n"
+      }
+    },
+    {
+      "id": "k22",
+      "name": "From Telegram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "k22c",
+              "leftValue": "={{ $json.channel === 'telegram' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "k23",
+      "name": "Reply on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1940,
+        200
+      ],
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "k24",
+      "name": "Answer the screen",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1940,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.voice_response) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "k25",
+      "name": "Photo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "k25c",
+              "leftValue": "={{ $json.idea && $json.idea.kind === 'photo' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "k26",
+      "name": "Get the photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        -120
+      ],
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.idea.file_id }}",
+        "download": true,
+        "additionalFields": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "k27",
+      "name": "Photo for the checker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -120
+      ],
+      "parameters": {
+        "jsCode": "// Product photo from Telegram -> base64 for the idea checker (it asks a free vision AI what the product is).\nconst item = $input.first();\nconst r = $('Request').first().json;\nlet b64 = null;\ntry { b64 = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('base64'); } catch (e) { b64 = null; }\nconst mime = (item.binary && item.binary.data && item.binary.data.mimeType) || 'image/jpeg';\nreturn [{ json: { kind: 'photo', text: r.idea.text, image_b64: b64 ? b64.slice(0, 1500000) : null, mime } }];\n"
+      }
+    },
+    {
+      "id": "k28",
+      "name": "Idea checker (photo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-idea",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'photo', text: $json.text, image_b64: $json.image_b64, mime: $json.mime }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "k29",
+      "name": "Idea checker (link or name)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis-idea",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Request').first().json.idea) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "k30",
+      "name": "Tell owner: checking",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        -50
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ ($json.message || '🔎 Checking this product: suppliers, competitor prices and searches. The report will arrive here in 1-3 minutes.') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "k31",
+      "name": "Webhook (approval request)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -700,
+        1000
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-approval",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {
+          "responseData": "Approval request sent to the owner's Telegram with Approve/Decline buttons. Wait for the answer; it will be saved in memory (kind approval)."
+        }
+      },
+      "webhookId": "e1c5a7b3-9d2f-4a6e-8b0c-7f3d5e1a2b64"
+    },
+    {
+      "id": "k32",
+      "name": "Approval text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "// Approval request from the agent (tool ask_owner_approval) -> Telegram text with buttons + a memory row.\nconst b = ($input.first().json || {}).body || {};\nconst esc = t => String(t ?? '').replace(/([_*`\\[])/g, '\\\\$1');   // Telegram legacy Markdown\nconst title = String(b.title || 'Approval needed').slice(0, 120);\nconst details = String(b.details || '').slice(0, 700);\nconst amount = Number(b.amount_cad) > 0 ? Number(b.amount_cad).toFixed(2) + ' CAD' : null;\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst approval_text = `*JARVIS asks your approval*\\n${esc(title)}` + (amount ? `\\nAmount: ${esc(amount)}` : '') + (details ? `\\n\\n${esc(details)}` : '') +\n  '\\n\\nNothing happens until you approve. No answer in 48 h = declined.';\nreturn [{ json: { title, details, amount, approval_text, kind: 'approval_pending',\n  summary: `Waiting for the owner's approval on Telegram (${day}): \"${title}\"` + (amount ? ` (${amount})` : '') + (details ? `: ${details.slice(0, 300)}` : '') } }];\n"
+      }
+    },
+    {
+      "id": "k33",
+      "name": "Save pending approval",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -260,
+        1120
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "k34",
+      "name": "Ask owner: approve?",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -260,
+        960
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "6203634137",
+        "message": "={{ $json.approval_text }}",
+        "responseType": "approval",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "✅ Approve",
+            "disapproveLabel": "❌ Decline"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 48,
+              "resumeUnit": "hours"
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "f2d6b8c4-0e3a-4b7f-9c1d-8a4e6f2b3c75"
+    },
+    {
+      "id": "k35",
+      "name": "Approval result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        960
+      ],
+      "parameters": {
+        "jsCode": "// Owner answered the approval buttons (or 48 h passed): memory row + a short confirmation.\nconst a = $('Approval text').first().json;\nconst r = $input.first().json || {};\nconst approved = r.data ? r.data.approved === true : r.approved === true;\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nconst status = approved ? 'APPROVED by the owner' : 'DECLINED by the owner (or no answer in 48 h)';\nreturn [{ json: { kind: 'approval', summary: `Approval request (${day}): \"${a.title}\"${a.amount ? ' (' + a.amount + ')' : ''}. Result: ${status}. JARVIS must still carry it out step by step; nothing was done automatically.`,\n  reply_text: approved ? `✅ Approved: ${a.title}. I've noted it; I'll tell you each step before anything is bought or published.` : `❌ Declined: ${a.title}. Nothing was done.` } }];\n"
+      }
+    },
+    {
+      "id": "k36",
+      "name": "Save approval to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        180,
+        1060
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "kind": "={{ $json.kind }}",
+            "summary": "={{ $json.summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "k37",
+      "name": "Confirm decision",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        180,
+        900
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.reply_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "s1",
+      "name": "Read the reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        1800
+      ],
+      "parameters": {
+        "jsCode": "// Sample request. Accepted forms:\n//  - a REPLY to a research product photo (\"sample\", \"sample 2\", \"échantillon\")\n//  - the product photo FORWARDED back to JARVIS (its caption is included)\n//  - just \"sample\" with no photo -> JARVIS explains how to ask\n// Everything we need is in the photo caption: name and CJ SKU. Quantity: a number 1-3 in the text, default 1.\nconst msg = $input.first().json.message || {};\nconst cap = (msg.reply_to_message && (msg.reply_to_message.caption || msg.reply_to_message.text)) || msg.caption || '';\nconst sku = (cap.match(/CJ SKU\\s+([A-Za-z0-9_-]+)/) || [])[1] || null;\nconst name = (cap.split('\\n')[0] || '').replace(/^\\d+\\.\\s*/, '').trim().slice(0, 120);\nconst warehouse = (cap.match(/🚚\\s*(CA|US) warehouse/) || [])[1] || 'CN';   // research caption shows the CJ warehouse\nconst qtyMatch = (msg.text || '').match(/\\b([1-3])\\b/);\nconst store = $getWorkflowStaticData('global');\nconst t = store.cjToken;\nconst tokenOk = t && t.value && t.expires && new Date(t.expires).getTime() - Date.now() > 24 * 3600 * 1000;\nreturn [{ json: {\n  problem: sku ? null : 'I need to know which product. In Telegram, swipe left on the product photo (or long-press it and tap Reply) and type \"sample\". You can also forward the photo to me',\n  sku, name, warehouse, qty: qtyMatch ? Number(qtyMatch[1]) : 1, owner_text: (msg.text || '').slice(0, 200),\n  chat_id: msg.chat ? msg.chat.id : null, need_token: !tokenOk, token: tokenOk ? t.value : null,\n} }];\n"
+      }
+    },
+    {
+      "id": "s1b",
+      "name": "Know the product?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -90,
+        1960
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "s1bc",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "s2",
+      "name": "Need a CJ token?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        20,
+        1800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "s2c",
+              "leftValue": "={{ $json.need_token === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "s3",
+      "name": "CJ get token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        1680
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "s4",
+      "name": "Save token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1680
+      ],
+      "parameters": {
+        "jsCode": "// Keep the CJ access token (about 15 days; CJ limits how often a new one can be requested).\nconst r = $input.first().json || {};\nconst d = r.data || {};\nconst value = d.accessToken || d.access_token || null;\nconst req = $('Read the reply').first().json;\nif (!value) return [{ json: { ...req, token: null, token_error: (r.message || 'CJ did not return an access token').slice(0, 200) } }];\nconst store = $getWorkflowStaticData('global');\nstore.cjToken = { value, expires: d.accessTokenExpiryDate || new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString() };\nreturn [{ json: { ...req, need_token: false, token: value } }];\n"
+      }
+    },
+    {
+      "id": "s5",
+      "name": "With token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        1800
+      ],
+      "parameters": {
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "s6",
+      "name": "CJ product details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        1800
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "productSku",
+              "value": "={{ $json.sku }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "s7",
+      "name": "Pick variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1800
+      ],
+      "parameters": {
+        "jsCode": "// Product details from CJ: choose the variant (first sellable one) and its price and weight.\nconst req = $('With token').first().json;\nconst r = $input.first().json || {};\nconst d = r.data || {};\nconst p = Array.isArray(d) ? d[0] || {} : (d.list ? d.list[0] || {} : d);\nconst vs = p.variants || p.variantList || [];\nconst v = vs.find(x => x && (x.vid || x.variantId)) || null;\nconst problem = req.token_error ? 'CJ login failed: ' + req.token_error\n  : (r.result === false || (r.code && r.code !== 200)) ? 'CJ said: ' + (r.message || r.code)\n  : !v ? 'CJ did not return a variant for SKU ' + req.sku : null;\n// CJ variant names often repeat the whole product name: keep only the part that differs (e.g. \"Pink Round shape\").\nconst pname = String(p.productNameEn || p.nameEn || '').trim();\nlet vname = v ? String(v.variantNameEn || v.variantName || v.variantKey || '').trim() : '';\nif (pname && vname.toLowerCase().startsWith(pname.toLowerCase())) vname = vname.slice(pname.length).replace(/^[\\s,:-]+/, '');\nreturn [{ json: { ...req, problem,\n  pid: p.pid || p.id || null, cj_name: p.productNameEn || p.nameEn || req.name,\n  vid: v ? (v.vid || v.variantId) : null, variant: vname || (v ? (v.variantKey || '') : ''),\n  variant_sku: v ? (v.variantSku || '') : '',\n  unit_usd: v ? parseFloat(v.variantSellPrice ?? v.sellPrice ?? p.sellPrice) || null : null,\n  weight_g: v ? Number(v.variantWeight ?? v.weight ?? 0) || null : null } }];\n"
+      }
+    },
+    {
+      "id": "s8",
+      "name": "Product OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1340,
+        1800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "s8c",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "s9",
+      "name": "CJ shipping to Canada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        1680
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/logistic/freightCalculate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ startCountryCode: $('Read the reply').first().json.warehouse || 'CN', endCountryCode: 'CA', products: [{ quantity: $json.qty, vid: $json.vid }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "s10",
+      "name": "Sample plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        1680
+      ],
+      "parameters": {
+        "jsCode": "// Sample order plan + approval text. Nothing is bought here: approval only unlocks the next step.\nconst q = $('Pick variant').first().json;\nconst r = $input.first().json || {};\nconst opts = (Array.isArray(r.data) ? r.data : []).map(o => ({ name: o.logisticName || '?', usd: parseFloat(o.logisticPrice), days: String(o.logisticAging || '') }))\n  .filter(o => o.usd >= 0);\nconst maxDays = o => { const n = (o.days.match(/\\d+/g) || []).map(Number); return n.length ? Math.max(...n) : 99; };\nconst ship = opts.filter(o => maxDays(o) <= 20).sort((a, b) => a.usd - b.usd)[0] || opts.sort((a, b) => a.usd - b.usd)[0] || null;\nconst USD_TO_CAD = 1.40;\nconst problem = q.problem || (!ship ? 'CJ gave no shipping option to Canada for this variant' : null);\nconst goods = q.unit_usd ? q.unit_usd * q.qty : 0;\nconst total_usd = +(goods + (ship ? ship.usd : 0)).toFixed(2);\nconst total_cad = +(total_usd * USD_TO_CAD).toFixed(2);\nconst md = t => String(t ?? '').replace(/([_*`\\[])/g, '\\\\$1');   // Telegram legacy Markdown (approval message)\nconst approval_text = problem ? '' : [\n  '*JARVIS: sample order needs your approval*',\n  'Product: ' + md(q.cj_name),\n  'Variant: ' + md(q.variant || 'default') + ' (SKU ' + md(q.variant_sku || q.sku) + ')',\n  'Quantity: ' + q.qty,\n  'Price: ' + md(q.unit_usd.toFixed(2)) + ' USD each',\n  'Shipping to Canada: ' + md(ship.usd.toFixed(2)) + ' USD, ' + md(ship.name) + ', ' + md(ship.days) + ' days',\n  '*Estimated total: ' + total_usd + ' USD (about ' + total_cad + ' CAD)*, before tax and duties',\n  'Approving does not charge anything by itself: you pay at CJ checkout.',\n].join('\\n');\nreturn [{ json: { ...q, ship, total_usd, total_cad, problem, approval_text } }];\n"
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Plan OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2000,
+        1680
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "s11c",
+              "leftValue": "={{ !$json.problem }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Ask owner: approve sample?",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2220,
+        1560
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "6203634137",
+        "message": "={{ $json.approval_text }}",
+        "responseType": "approval",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "✅ Approve sample",
+            "disapproveLabel": "❌ Decline"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 48,
+              "resumeUnit": "hours"
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "2d3a63f6-f92d-4ea0-8b56-25a162d21459"
+    },
+    {
+      "id": "s13",
+      "name": "Sample result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        1800
+      ],
+      "parameters": {
+        "jsCode": "// Final message (HTML). Approved -> exact steps to place the order at CJ. Declined/expired -> nothing done.\nlet q;\ntry { q = $('Sample plan').first().json; } catch (e) {\n  try { q = $('Pick variant').first().json; } catch (e2) { q = $('Read the reply').first().json; }\n}\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet text;\nif (q.problem) {\n  text = q.sku\n    ? 'JARVIS could not prepare the sample order for <b>' + esc(q.name || q.sku) + '</b>: ' + esc(q.problem) +\n      '.\\nNothing was ordered. Reply \"sample\" to a product photo from the research report to try again.'\n    : 'JARVIS: ' + esc(q.problem) + '.';\n} else {\n  const r = ($input.first().json || {}).data || {};\n  if (r.approved === true) {\n    text = [\n      '✅ <b>Sample approved</b>: ' + esc(q.cj_name),\n      'Order it at CJ (about 2 minutes):',\n      '1. cjdropshipping.com, search <code>' + esc(q.sku) + '</code>',\n      '2. Choose variant: ' + esc(q.variant || 'default') + ', quantity ' + q.qty,\n      '3. Shipping method: ' + esc(q.ship.name) + ' (' + esc(q.ship.days) + ' days), to your Canadian address',\n      '4. Pay at checkout. Expected total about ' + q.total_usd + ' USD (~' + q.total_cad + ' CAD) before tax and duties.',\n      'When it arrives, tell JARVIS the real delivery days and quality.',\n      '(JARVIS will place orders by itself only after CJ ordering is connected and tested.)',\n    ].join('\\n');\n  } else if (r.approved === false) {\n    text = '❌ Sample declined: ' + esc(q.cj_name) + '. Nothing was ordered.';\n  } else {\n    text = 'No answer within 48 hours: the sample for ' + esc(q.cj_name) + ' was treated as declined. Nothing was ordered.';\n  }\n}\nreturn [{ json: { reply_text: text.slice(0, 4000) } }];\n"
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Reply: sample",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2680,
+        1800
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.reply_text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    },
+    {
+      "id": "s0",
+      "name": "Sample README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        1380
+      ],
+      "parameters": {
+        "width": 1100,
+        "height": 180,
+        "content": "## Sample order (reply to a product photo)\nReply **sample** (optionally a quantity 1-3) to a product photo from the research report. JARVIS looks up the product and the real shipping cost to Canada on CJ, then asks you to approve. Approving does not buy anything: JARVIS then sends you the exact steps to order at CJ.\nCredentials: **CJ API key** in *CJ get token*; **JARVIS Telegram** in *Ask owner: approve sample?* and *Reply: sample*."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Memory: sample",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2680,
+        2000
+      ],
+      "parameters": {
+        "jsCode": "// Remember what happened (sample decisions, approvals) so JARVIS can answer \"did I accept anything?\".\nconst KIND = 'sample';\nconst j = $input.first().json || {};\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nlet text = '';\nif (KIND === 'approval_pending') {\n  const d = j.decision || {};\n  text = `Waiting for the owner's approval on Telegram (${day}): \"${String(d.summary || '').slice(0, 200)}\" because ${(j.approval_reasons || []).join('; ')}.`;\n} else if (KIND === 'sample_pending') {\n  text = `Sample request waiting for the owner's approval on Telegram (${day}): ${String(j.cj_name || j.name || '').slice(0, 120)}, quantity ${j.qty}, estimated total ${j.total_usd} USD (about ${j.total_cad} CAD).`;\n} else if (KIND === 'approval') {\n  const d = j.decision || {};\n  const status = { approved: 'APPROVED by the owner', rejected: 'DECLINED by the owner', expired_rejected: 'no answer in 48 h, treated as declined' }[j.approval_status] || j.approval_status;\n  text = `Approval request (${day}): \"${String(d.summary || '').slice(0, 200)}\" because ${(j.approval_reasons || []).join('; ')}. Result: ${status}. Nothing was carried out automatically.`;\n} else {\n  text = `Sample request (${day}): ` + String(j.reply_text || '').replace(/<[^>]+>/g, '').replace(/\\s+/g, ' ').slice(0, 600);\n}\nreturn [{ json: { kind: KIND, summary: text.slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Save sample to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2900,
+        2000
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "s17",
+      "name": "Memory: sample pending",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        1360
+      ],
+      "parameters": {
+        "jsCode": "// Remember what happened (sample decisions, approvals) so JARVIS can answer \"did I accept anything?\".\nconst KIND = 'sample_pending';\nconst j = $input.first().json || {};\nconst day = new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', dateStyle: 'medium', timeStyle: 'short' });\nlet text = '';\nif (KIND === 'approval_pending') {\n  const d = j.decision || {};\n  text = `Waiting for the owner's approval on Telegram (${day}): \"${String(d.summary || '').slice(0, 200)}\" because ${(j.approval_reasons || []).join('; ')}.`;\n} else if (KIND === 'sample_pending') {\n  text = `Sample request waiting for the owner's approval on Telegram (${day}): ${String(j.cj_name || j.name || '').slice(0, 120)}, quantity ${j.qty}, estimated total ${j.total_usd} USD (about ${j.total_cad} CAD).`;\n} else if (KIND === 'approval') {\n  const d = j.decision || {};\n  const status = { approved: 'APPROVED by the owner', rejected: 'DECLINED by the owner', expired_rejected: 'no answer in 48 h, treated as declined' }[j.approval_status] || j.approval_status;\n  text = `Approval request (${day}): \"${String(d.summary || '').slice(0, 200)}\" because ${(j.approval_reasons || []).join('; ')}. Result: ${status}. Nothing was carried out automatically.`;\n} else {\n  text = `Sample request (${day}): ` + String(j.reply_text || '').replace(/<[^>]+>/g, '').replace(/\\s+/g, ' ').slice(0, 600);\n}\nreturn [{ json: { kind: KIND, summary: text.slice(0, 1500) } }];\n"
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Save pending sample",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2440,
+        1360
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Only the owner?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only the owner?": {
+      "main": [
+        [
+          {
+            "node": "Sample request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample request?": {
+      "main": [
+        [
+          {
+            "node": "Read the reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (JARVIS screen)": {
+      "main": [
+        [
+          {
+            "node": "Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request": {
+      "main": [
+        [
+          {
+            "node": "Product idea?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Product idea?": {
+      "main": [
+        [
+          {
+            "node": "Photo?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Products request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Photo?": {
+      "main": [
+        [
+          {
+            "node": "Get the photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Idea checker (link or name)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the photo": {
+      "main": [
+        [
+          {
+            "node": "Photo for the checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Photo for the checker": {
+      "main": [
+        [
+          {
+            "node": "Idea checker (photo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idea checker (photo)": {
+      "main": [
+        [
+          {
+            "node": "Tell owner: checking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idea checker (link or name)": {
+      "main": [
+        [
+          {
+            "node": "Tell owner: checking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Products request?": {
+      "main": [
+        [
+          {
+            "node": "Research: send products",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research: send products": {
+      "main": [
+        [
+          {
+            "node": "Final reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read memory": {
+      "main": [
+        [
+          {
+            "node": "Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Context": {
+      "main": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JARVIS agent": {
+      "main": [
+        [
+          {
+            "node": "Final reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final reply": {
+      "main": [
+        [
+          {
+            "node": "From Telegram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Telegram?": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer the screen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (approval request)": {
+      "main": [
+        [
+          {
+            "node": "Approval text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval text": {
+      "main": [
+        [
+          {
+            "node": "Ask owner: approve?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save pending approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask owner: approve?": {
+      "main": [
+        [
+          {
+            "node": "Approval result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval result": {
+      "main": [
+        [
+          {
+            "node": "Confirm decision",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save approval to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OmniRoute chat model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "products_today": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "run_product_research": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_product_idea": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memory_search": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "profit_calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "morning_briefing": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ask_owner_approval": {
+      "ai_tool": [
+        [
+          {
+            "node": "JARVIS agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the reply": {
+      "main": [
+        [
+          {
+            "node": "Know the product?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Know the product?": {
+      "main": [
+        [
+          {
+            "node": "Need a CJ token?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sample result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need a CJ token?": {
+      "main": [
+        [
+          {
+            "node": "CJ get token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "With token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ get token": {
+      "main": [
+        [
+          {
+            "node": "Save token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save token": {
+      "main": [
+        [
+          {
+            "node": "With token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "With token": {
+      "main": [
+        [
+          {
+            "node": "CJ product details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ product details": {
+      "main": [
+        [
+          {
+            "node": "Pick variant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick variant": {
+      "main": [
+        [
+          {
+            "node": "Product OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Product OK?": {
+      "main": [
+        [
+          {
+            "node": "CJ shipping to Canada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sample result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ shipping to Canada": {
+      "main": [
+        [
+          {
+            "node": "Sample plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample plan": {
+      "main": [
+        [
+          {
+            "node": "Plan OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan OK?": {
+      "main": [
+        [
+          {
+            "node": "Ask owner: approve sample?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Memory: sample pending",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sample result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask owner: approve sample?": {
+      "main": [
+        [
+          {
+            "node": "Sample result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample result": {
+      "main": [
+        [
+          {
+            "node": "Reply: sample",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Memory: sample",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory: sample": {
+      "main": [
+        [
+          {
+            "node": "Save sample to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory: sample pending": {
+      "main": [
+        [
+          {
+            "node": "Save pending sample",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

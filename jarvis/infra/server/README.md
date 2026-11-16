@@ -47,6 +47,31 @@ store's domain later.
 | Status | `ssh root@$IP "cd /opt/jarvis && docker compose ps && free -h"` |
 | Backup now | `ssh root@$IP /opt/jarvis/backup.sh` |
 | Logs | `ssh root@$IP "cd /opt/jarvis && docker compose logs --tail 50 n8n"` |
+| 24/7 check | `ssh root@$IP "bash /root/jarvis-server/ops-247.sh"` |
+| Watchdog log | `ssh root@$IP "tail /var/log/jarvis-watchdog.log"` |
+
+## 24/7 without the laptop
+Everything runs on this server. The laptop is only for building.
+- **Auto-restart:** Docker starts at boot and every container has `restart: unless-stopped` (n8n, Postgres, OmniRoute, voice and video service, Caddy for the screen).
+- **Watchdog** (`watchdog.sh`, every 5 minutes): restarts a container that is stopped or "unhealthy", and n8n if its health page stops answering 3 times in a row.
+- **Outside watchdog:** UptimeRobot (free) checks `https://n8n.<ip-with-dashes>.sslip.io/healthz/readiness` every 5 minutes and emails you (and its phone app notifies you) if the whole server is down.
+- **Health checks inside:** Alerts v2 sends a Telegram alert when a workflow fails, when a key stops working, or when the daily research did not go out.
+- **Backups:** every night at 03:30, 14 days kept on the server. With `offsite-setup.sh`, each backup is also **encrypted** and sent to your Telegram (off-server copy).
+  Turning on Hetzner's own backups (Server > Backups, about +20%) adds a second off-server copy.
+
+Set up (once, from PowerShell):
+```powershell
+ssh root@$IP "bash /root/jarvis-server/ops-247.sh"
+ssh -t root@$IP "bash /opt/jarvis/offsite-setup.sh"
+```
+`offsite-setup.sh` asks for the JARVIS bot token without showing it on screen (paste it there, never in a chat), then prints a **backup key**.
+Save that key in your password manager: without it the backup files cannot be opened.
+
+### Restore from a Telegram backup
+1. Download the `.enc` file from Telegram, copy it to the server: `scp jarvis-XXXX.tar.gz.enc root@${IP}:/root/`
+2. Decrypt: `ssh root@$IP "openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:/opt/jarvis/backup.key -in /root/jarvis-XXXX.tar.gz.enc -out /root/restore.tar.gz"`
+   (on a new server, first put the saved key into `/opt/jarvis/backup.key`)
+3. Inside: `n8n-db.sql.gz` (all workflows, credentials, data tables), `n8n_data` and `omniroute-data` volumes, `env.backup` (secrets), and `workflows.tar.gz` (each workflow as JSON, importable one by one). Ask Claude for the full restore steps for your case.
 
 ## JARVIS screen (voice)
 A password-protected page at `https://jarvis.<ip-with-dashes>.sslip.io`, with hold-to-talk (Chrome or Edge), spoken replies, conversation, today's stats and pending approvals.
@@ -56,5 +81,6 @@ scp -r $HOME\jarvis-repo\jarvis\infra\server\* root@${IP}:/root/jarvis-server/
 ssh root@$IP "bash /root/jarvis-server/voice-setup.sh"
 ```
 The script prints the address, the username (`owner`), a new password, and the key for the n8n Webhook credential. Save them in your password manager.
-Then import `workflows/jarvis-voice-v1.json` in n8n, set its credentials and publish it.
+Then import `workflows/jarvis-brain-v1.json` in n8n (it answers the screen and Telegram), set its credentials and publish it.
+Re-running `voice-setup.sh` also rebuilds the voice service (now with the video maker) and keeps your password and key.
 Voice recognition uses Chrome's built-in service, which sends your audio to Google. Typing always works.

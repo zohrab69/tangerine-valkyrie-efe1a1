@@ -1,0 +1,1423 @@
+{
+  "name": "JARVIS Research v2 (daily products)",
+  "nodes": [
+    {
+      "id": "r0",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -460
+      ],
+      "parameters": {
+        "width": 1700,
+        "height": 280,
+        "content": "## JARVIS Research v2 - daily products from CJ Dropshipping, sent to your Telegram\nRuns **every day at 10:00** (Toronto), and on demand: JARVIS calls the webhook when you say \"send me today's products\", \"resend the products\" or \"what's viral today\" (resends the saved report if today's exists, otherwise runs now).\nYour rules: electronics only without batteries or chargers, no beauty, kids, food or medical; anything that may need a certification is marked \u26a0\ufe0f. Every theme is searched in CJ's **Canada and US warehouses first** (fast delivery for Black Friday and Christmas), then China.\nMarket check with the **free SerpApi plan** (250 searches/month): a daily allowance, 10-day cache, 40 searches kept for your own idea checks, and a warning when it gets low. It never goes over.\nCredentials: **CJ API key** (Custom Auth) in *CJ get token*; **SerpApi** (Query Auth, name api_key) in *SerpApi account*, *Google Shopping* and *Google Trends*; **OmniRoute** in *AI notes*; **JARVIS Telegram** in every Telegram node; **JARVIS screen key** (Header Auth) in *Webhook (run or resend)*. Check each one after import.\nAll money figures are estimates. Nothing is ordered or published. Each day's report is saved in **jarvis_memory** (kinds research and research_report).\nAfter the report it writes a summary to the data table **jarvis_memory** so the JARVIS screen and Telegram know what was sent."
+      }
+    },
+    {
+      "id": "r1",
+      "name": "Every day 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r32",
+      "name": "Webhook (run or resend)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        520
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-research",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "5a0d7c1e-3b0f-4f8e-9a51-2f3e0c9d7a11"
+    },
+    {
+      "id": "r33",
+      "name": "Latest saved report",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -440,
+        520
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "kind",
+              "condition": "eq",
+              "keyValue": "research_report"
+            }
+          ]
+        },
+        "limit": 1,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r34",
+      "name": "Run or resend?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        520
+      ],
+      "parameters": {
+        "jsCode": "// On-demand entry (webhook from JARVIS's brain, Telegram or the screen): run research now, or resend\n// the latest saved report. mode: \"run\" | \"resend\" | \"auto\" (auto = resend today's report if there is\n// one, otherwise run now). Input: the latest research_report row from jarvis_memory.\nconst TZ = 'America/Toronto';\nconst body = ($('Webhook (run or resend)').first().json || {}).body || {};\nconst mode = ['run', 'resend', 'auto'].includes(body.mode) ? body.mode : 'auto';\nconst today = new Date().toLocaleDateString('en-CA', { timeZone: TZ });\nlet last = null;\nconst row = $input.first().json || {};\nif (row.kind === 'research_report' && row.summary) { try { last = JSON.parse(row.summary); } catch (e) { last = null; } }\nlet action = mode;\nif (mode === 'auto') action = last && last.day === today ? 'resend' : 'run';\nif (action === 'resend' && !last) action = 'run';\n// Do not start a second run within 15 minutes (a run takes a few minutes and uses CJ/SerpApi).\nconst store = $getWorkflowStaticData('global');\nif (action === 'run' && store.lastRunAt && Date.now() - store.lastRunAt < 15 * 60 * 1000) action = last ? 'resend' : 'busy';\nif (action === 'run') store.lastRunAt = Date.now();\nconst said = { run: \"I'm running product research now. The top 5 will arrive on Telegram in a few minutes.\",\n               resend: `Sending ${last && last.day === today ? \"today's\" : 'the latest'} products${last ? ' (' + last.day + ')' : ''} to your Telegram now.`,\n               busy: 'Product research is already running. The results will arrive on Telegram in a few minutes.' }[action];\nconst reply = { ok: true, action, day: last ? last.day : null, message: said,\n  products: last ? last.items.map(i => String(i.text || '').split('\\n')[0].replace(/<[^>]+>/g, '')) : [] };\nreturn [{ json: { action, reply, last, keywords: Array.isArray(body.keywords) ? body.keywords : null } }];\n"
+      }
+    },
+    {
+      "id": "r35",
+      "name": "Answer the caller",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.reply) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "r36",
+      "name": "Run now?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r36c",
+              "leftValue": "={{ $json.action === 'run' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r37",
+      "name": "Resend?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        640
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r37c",
+              "leftValue": "={{ $json.action === 'resend' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r38",
+      "name": "Resend saved report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        640
+      ],
+      "parameters": {
+        "jsCode": "// Resend the saved report: one photo message per product, then the summary (no new searches).\nconst d = $input.first().json;\nconst last = d.last || { items: [], summary: '' };\nconst note = last.day ? `\\n<i>Resent from ${last.day}: saved results, no new searches.</i>` : '';\nconst items = last.items.map((it, i) => ({ json: { photo: it.photo, has_photo: !!it.photo, caption: it.caption, text: it.text,\n  summary: (last.summary || '') + note, index: i } }));\nreturn items.length ? items : [{ json: { photo: '', has_photo: false, caption: '', text: '', summary: (last.summary || 'No saved report yet.') + note, index: 0 } }];\n"
+      }
+    },
+    {
+      "id": "r39",
+      "name": "Send saved photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        640
+      ],
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "6203634137",
+        "binaryData": false,
+        "file": "={{ $json.photo }}",
+        "additionalFields": {
+          "caption": "={{ $json.caption }}",
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r40",
+      "name": "Resend summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        640
+      ],
+      "parameters": {
+        "jsCode": "// After the resent photos: the summary, plus the text of any product whose photo could not be sent.\nconst reports = $('Resend saved report').all().map(i => i.json);\nconst results = $input.all().map(i => i.json || {});\nconst failed = reports.filter((r, i) => r.text && (!results[i] || results[i].error || !r.has_photo));\nlet msg = reports.length ? reports[0].summary : '';\nif (failed.length) msg = failed.map(r => r.text).join('\\n\\n') + '\\n\\n' + msg;\nreturn [{ json: { report: msg.slice(0, 4000) } }];\n"
+      }
+    },
+    {
+      "id": "r41",
+      "name": "Send resent report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        640
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.report }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r42",
+      "name": "SerpApi account (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2760,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/account.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "r43",
+      "name": "Fresh market calls?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3060,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r43c",
+              "leftValue": "={{ $json.none !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r2",
+      "name": "Run now (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "r3",
+      "name": "Research plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Research plan: which searches to run this time, and whether we need a new CJ token.\n// Daily at 10:00 (Toronto) + on demand. Owner rules: see the product rules in \"Screen products\".\n// Holiday season (Black Friday, Christmas): prefer CJ products already in a US or Canada warehouse\n// (fast delivery), so every theme is searched in the CA and US warehouses, then in China.\nconst CONFIG = {\n  keywords: [\n    'kitchen gadget', 'kitchen organizer', 'pet grooming', 'pet bowl', 'home storage',\n    'closet organizer', 'bathroom accessories', 'car organizer', 'winter car accessories',\n    'phone stand', 'cable organizer', 'desk organizer', 'christmas decoration', 'gift for him',\n    'travel accessories', 'cleaning brush', 'yoga accessories', 'camping gear',\n  ],\n  per_run: 3,              // themes per run (each theme = 3 CJ searches: CA, US, CN warehouses)\n  page_size: 40,           // CJ sorts by how many stores list each product (orderBy=listedNum)\n  warehouses: ['CA', 'US', 'CN'],\n};\nconst store = $getWorkflowStaticData('global');\nconst start = (store.kwIndex || 0) % CONFIG.keywords.length;\nconst picked = [0, 1, 2].slice(0, CONFIG.per_run).map(i => CONFIG.keywords[(start + i) % CONFIG.keywords.length]);\nstore.kwIndex = start + CONFIG.per_run;\n// Owner can force themes (\"research phone stands\") through the webhook or another workflow.\nconst inp = $input.first().json || {};\nconst forced = inp.keywords || (inp.body && inp.body.keywords) || null;\nconst keywords = Array.isArray(forced) && forced.length ? forced.slice(0, 3).map(k => String(k).slice(0, 40)) : picked;\nconst t = store.cjToken;\nconst tokenOk = t && t.value && t.expires && new Date(t.expires).getTime() - Date.now() > 24 * 3600 * 1000;\nreturn [{ json: { run_id: 'research_' + Date.now().toString(36), keywords, page_size: CONFIG.page_size, warehouses: CONFIG.warehouses,\n                  need_token: !tokenOk, token: tokenOk ? t.value : null } }];\n"
+      }
+    },
+    {
+      "id": "r4",
+      "name": "Need a new CJ token?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r4c",
+              "leftValue": "={{ $json.need_token === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r5",
+      "name": "CJ get token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -20
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r6",
+      "name": "Save token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "// Keep the CJ access token (valid about 15 days; CJ limits how often a new one can be requested).\nconst r = $input.first().json || {};\nconst d = r.data || {};\nconst value = d.accessToken || d.access_token || null;\nif (!value) throw new Error('CJ did not return an access token: ' + JSON.stringify(r).slice(0, 300));\nconst expires = d.accessTokenExpiryDate || new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString();\nconst store = $getWorkflowStaticData('global');\nstore.cjToken = { value, expires };\nconst plan = $('Research plan').first().json;\nreturn [{ json: { ...plan, need_token: false, token: value } }];\n"
+      }
+    },
+    {
+      "id": "r7",
+      "name": "Searches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// One item per theme and warehouse country -> one CJ product search each (CA, US, then CN).\nconst plan = $input.first().json;\nconst out = [];\nfor (const k of plan.keywords) for (const w of plan.warehouses || ['CN']) {\n  const query = { pageNum: 1, pageSize: plan.page_size, productNameEn: k, orderBy: 'listedNum' };\n  if (w !== 'CN') query.countryCode = w;   // CJ: products stocked in that country's warehouse\n  out.push({ json: { keyword: k, warehouse: w, query, token: plan.token, page_size: plan.page_size, run_id: plan.run_id } });\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "r8",
+      "name": "CJ product search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/list",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.query) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r9",
+      "name": "Screen products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Screen CJ search results (no AI): owner's product rules, price band, de-duplicate, competition check, rank.\n// Demand = how many stores already list the product on CJ (CJ returns results sorted by it), plus\n// CJ's sales/order count when the API provides one. Products in a CA or US warehouse come first\n// (holiday season: fast delivery). Keeps the best 12.\n// ---- Product rules (owner decisions 2026-11-16) - shared by research and idea checks ----\n// Electronics are allowed only WITHOUT batteries or chargers. Beauty stays out. Kids, food,\n// supplements, medical and weapons stay out (extra Canadian rules). Anything that may need a\n// certification is flagged, not hidden.\nconst RULES = {\n  exclude: [\n    [/batter|rechargeable|lithium|li-?ion|power ?bank|charg(er|ing)|cordless|wireless|bluetooth|solar|\\bvape\\b|e-?cig/i, 'has a battery or charger'],\n    [/cosmetic|make ?up|lipstick|mascara|eyelash|eyeliner|skin ?care|serum|face cream|lotion|perfume|fragrance|nail (polish|art|gel)|hair (dye|color|colour)|beauty|facial|wig\\b/i, 'beauty (kept out for now)'],\n    [/\\btoys?\\b|\\bkids?\\b|child|children|baby|infant|toddler|nursery/i, \"kids' product (Health Canada toy rules)\"],\n    [/\\bfood\\b|snack|supplement|vitamin|protein powder|\\btea\\b|coffee beans|candy/i, 'food or supplement'],\n    [/medical|medicine|therapy|massager|blood pressure|thermometer|hearing aid|pain relief|posture corrector|orthopedic/i, 'medical claims (Health Canada)'],\n    [/knife set|weapon|pepper spray|taser|stun|crossbow|airsoft|\\bgun\\b|cbd|nicotine/i, 'restricted item'],\n  ],\n  certification: [\n    [/electr|\\busb\\b|\\bled\\b|lamp|\\blights?\\b|plug|\\bac\\b|adapter|110v|120v|220v|heater|heat(ed|ing)|motor|fan\\b|humidifier|diffuser|kettle|blender|grinder|sensor|remote control/i,\n     'electrical: plug-in or powered items need CSA, cUL or ETL marking to be sold in Canada; ask CJ for the certificate'],\n    [/\\bradio\\b|\\bwifi\\b|wi-fi|\\brf\\b|transmitter|walkie|gps tracker|smart\\b/i, 'radio device: needs ISED Canada certification'],\n    [/cup|mug|bottle|bowl|plate|lunch ?box|cutting board|utensil|spatula|straw|food storage|container|baking|silicone mold/i,\n     'touches food: ask CJ for a food-contact test report (FDA or LFGB)'],\n    [/helmet|life ?jacket|car seat|seat ?belt|reflective vest/i, 'safety gear: may need certification (CSA or DOT)'],\n    [/magnet/i, 'small magnets: Health Canada warns about swallowing; keep packaging adult-only'],\n  ],\n};\nfunction checkRules(text) {\n  const t = String(text || '');\n  const excluded = RULES.exclude.filter(([re]) => re.test(t)).map(([, why]) => why);\n  const certification = RULES.certification.filter(([re]) => re.test(t)).map(([, why]) => why);\n  return { excluded: excluded.length ? excluded[0] : null, certification };\n}\n// ---- end of product rules ----\nconst MAX_COST_USD = 20;   // supplier price ceiling, before shipping\nconst searches = $('Searches').all().map(i => i.json);\nconst out = [], seen = new Set(), notes = [];\nlet excludedCount = 0;\n$input.all().forEach((item, idx) => {\n  const r = item.json || {};\n  if (r.error) { notes.push(`search \"${searches[idx]?.keyword}\": request failed (${(r.error.message || JSON.stringify(r.error)).slice(0, 120)})`); return; }\n  if (r.result === false || (r.code && r.code !== 200)) { notes.push(`search \"${searches[idx]?.keyword}\": CJ said ${r.message || r.code}`); return; }\n  const d = r.data || {};\n  let list = d.list || d.content || [];\n  if (list.length && list[0] && Array.isArray(list[0].productList)) list = list.flatMap(x => x.productList);\n  for (const p of list) {\n    const pid = p.pid || p.id; if (!pid || seen.has(pid)) continue;\n    const name = p.productNameEn || p.nameEn || p.productName || '';\n    const cat = p.categoryName || p.threeCategoryName || '';\n    const price = parseFloat(String(p.sellPrice ?? p.nowPrice ?? '').split('-')[0]);\n    if (!name || !(price > 0) || price > MAX_COST_USD) continue;\n    const rule = checkRules(name + ' ' + cat);\n    if (rule.excluded) { excludedCount++; continue; }\n    seen.add(pid);\n    let image = p.productImage || p.bigImage || p.image || '';\n    if (typeof image === 'string' && image.trim().startsWith('[')) { try { image = JSON.parse(image)[0] || ''; } catch { image = ''; } }\n    if (Array.isArray(image)) image = image[0] || '';\n    image = String(image || '').replace(/^http:/, 'https:');\n    const sold = Number(p.saleNum ?? p.salesVolume ?? p.soldNum ?? p.orderNum ?? 0) || 0;\n    out.push({ pid, name: name.slice(0, 120), category: cat, sku: p.productSku || p.sku || '',\n               image: /^https:\\/\\//.test(image) ? image : '', list_price_usd: price,\n               listed_by_stores: Number(p.listedNum ?? p.listedShopNum ?? 0) || 0, sold_count: sold,\n               keyword: searches[idx]?.keyword || '', warehouse: searches[idx]?.warehouse || 'CN',\n               certification: rule.certification, token: searches[0]?.token });\n  }\n});\nconst demand = x => x.listed_by_stores + 2 * x.sold_count;\nout.forEach(x => { x.demand_score = demand(x); });\n\n// Competition check (no AI). Two signals:\n//  1. how many stores already sell it through CJ (more stores = proven, but also more competitors)\n//  2. how many near-identical products came up in the same searches (copies of the same item)\n// Bands: under 20 = unproven, 20-1999 = healthy (best), 2000-7999 = crowded, 8000+ = saturated.\nconst words = n => new Set(String(n).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\\s+/)\n  .filter(w => w.length > 3 && !['with', 'for', 'and', 'the', 'from', 'pet', 'dog', 'cat', 'home', 'kitchen', 'tool', 'tools'].includes(w)));\nconst W = out.map(x => words(x.name));\nout.forEach((x, i) => {\n  x.similar_count = W.filter((w, j) => j !== i && [...W[i]].filter(t => w.has(t)).length >= 3).length;\n  const n = x.listed_by_stores;\n  x.competition = n < 20 ? 'unproven' : n < 2000 ? 'healthy' : n < 8000 ? 'crowded' : 'saturated';\n});\nconst BAND = { healthy: 0, crowded: 1, unproven: 2, saturated: 3 };\nconst local = x => (x.warehouse === 'CA' || x.warehouse === 'US') ? 0 : 1;\nout.sort((a, b) => (BAND[a.competition] >= 2) - (BAND[b.competition] >= 2) || local(a) - local(b) || (BAND[a.competition] - BAND[b.competition]) || (a.similar_count >= 4) - (b.similar_count >= 4) || b.demand_score - a.demand_score);\nconst keep = out.slice(0, 12);\nif (excludedCount) notes.push(excludedCount + ' product(s) skipped by your rules (batteries/chargers, beauty, kids, food, medical)');\nif (!keep.length) return [{ json: { empty: true, notes, token: searches[0]?.token } }];\nreturn keep.map(p => ({ json: { ...p, screen_notes: notes } }));\n"
+      }
+    },
+    {
+      "id": "r10",
+      "name": "Nothing found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r10c",
+              "leftValue": "={{ $json.empty === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r11",
+      "name": "CJ variants",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/product/variant/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pid",
+              "value": "={{ $json.pid }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r12",
+      "name": "Pick variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// First sellable variant of each product: its id (needed for shipping), price and weight.\nconst prods = $('Screen products').all().map(i => i.json);\nreturn $input.all().map((item, idx) => {\n  const p = prods[idx]; const r = item.json || {};\n  const vs = Array.isArray(r.data) ? r.data : (r.data && (r.data.variants || r.data.list)) || [];\n  const v = vs.find(x => x && (x.vid || x.variantId)) || null;\n  return { json: { ...p, vid: v ? (v.vid || v.variantId) : null,\n                   variant_name: v ? (v.variantNameEn || v.variantName || '') : '',\n                   cost_usd: v ? parseFloat(v.variantSellPrice ?? v.sellPrice ?? p.list_price_usd) || p.list_price_usd : p.list_price_usd,\n                   weight_g: v ? Number(v.variantWeight ?? v.weight ?? 0) || null : null } };\n});\n"
+      }
+    },
+    {
+      "id": "r13",
+      "name": "CJ shipping to Canada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://developers.cjdropshipping.com/api2.0/v1/logistic/freightCalculate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "CJ-Access-Token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ startCountryCode: $json.warehouse || 'CN', endCountryCode: 'CA', products: [{ quantity: 1, vid: $json.vid }] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r14",
+      "name": "Finance (no AI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Finance 1 (pure arithmetic, no AI). Every number is an ESTIMATE from CJ's quoted prices.\nconst F = {\n  usd_to_cad: 1.40,          // check the current rate before relying on results\n  markup: 2.5,               // suggested retail = landed cost x markup, then rounded to .99\n  min_profit_cad: 12,        // or at least this much above landed cost\n  max_retail_cad: 60,        // owner's price ceiling\n  payment_pct: 0.029, payment_fixed_cad: 0.30,   // card processing (verify on your Shopify plan)\n  returns_pct: 0.05,         // allowance for refunds/returns\n  marketing_pct: 0.20,       // allowance for ads/promotion per sale\n  max_days: 20,              // longest acceptable delivery estimate to Canada\n  // Owner's TARGETS (2026-11-10): products meeting both are listed first and marked \ud83c\udfaf\n  target_profit_cad: 10,\n  target_days: 10,\n};\nconst prods = $('Pick variant').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((item, idx) => {\n  const p = prods[idx]; const r = item.json || {};\n  const opts = (Array.isArray(r.data) ? r.data : []).map(o => ({\n    name: o.logisticName || o.name || '?', usd: parseFloat(o.logisticPrice ?? o.price), days: String(o.logisticAging || o.aging || '')\n  })).filter(o => o.usd >= 0);\n  const maxDays = o => { const n = (o.days.match(/\\d+/g) || []).map(Number); return n.length ? Math.max(...n) : 99; };\n  const ok = opts.filter(o => maxDays(o) <= F.max_days).sort((a, b) => a.usd - b.usd);\n  const ship = ok[0] || opts.sort((a, b) => a.usd - b.usd)[0] || null;\n  const landed_usd = p.cost_usd + (ship ? ship.usd : 0);\n  const landed = +(landed_usd * F.usd_to_cad).toFixed(2);\n  let price = Math.max(landed * F.markup, landed + F.min_profit_cad);\n  price = Math.ceil(price) - 0.01;\n  const fees = price * F.payment_pct + F.payment_fixed_cad;\n  const profit = +(price - landed - fees - price * F.returns_pct - price * F.marketing_pct).toFixed(2);\n  const flags = [];\n  if (!p.vid) flags.push('no variant data');\n  if (!ship) flags.push('no shipping quote to Canada');\n  else if (maxDays(ship) > F.max_days) flags.push('slow delivery (' + ship.days + ' days)');\n  if (price > F.max_retail_cad) flags.push('price above ' + F.max_retail_cad + ' CAD');\n  if (profit < 8) flags.push('thin profit');\n  if (p.competition === 'unproven') flags.push('unproven demand (few stores sell it yet)');\n  if (p.competition === 'crowded') flags.push('crowded: ' + p.listed_by_stores + ' stores already sell it');\n  if (p.competition === 'saturated') flags.push('saturated: ' + p.listed_by_stores + ' stores sell it, hard to stand out');\n  (p.certification || []).forEach(c => flags.push('\u26a0\ufe0f ' + c));\n  if (p.similar_count >= 4) flags.push(p.similar_count + ' near-identical copies on CJ');\n  const days = ship ? maxDays(ship) : 99;\n  const meets_target = !!ship && profit >= F.target_profit_cad && days <= F.target_days;\n  const misses = [];\n  if (profit < F.target_profit_cad) misses.push('profit under ' + F.target_profit_cad + ' CAD');\n  if (days > F.target_days) misses.push('delivery over ' + F.target_days + ' days');\n  const local_warehouse = p.warehouse === 'CA' || p.warehouse === 'US';\n  out.push({ json: { ...p, local_warehouse, meets_target, target_misses: misses, shipping: ship, landed_cad: landed, price_cad: +price.toFixed(2),\n                     est_profit_cad: profit, margin_pct: Math.round(profit / price * 100), flags,\n                     estimate_note: 'Estimates from CJ quotes; excludes sales tax, duties and samples.' } });\n});\nreturn out;\n"
+      }
+    },
+    {
+      "id": "r15",
+      "name": "Shortlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Rank: no blocking flags first, then products meeting the owner's targets, then CA/US warehouse (holiday season),\n// then competition band (healthy > crowded > unproven > saturated), then profit x demand.\n// Keeps 8 candidates: the market check (SerpApi, limited free searches) then picks the final 5.\nconst all = $input.all().map(i => i.json);\nconst blocking = f => f.some(x => /no shipping|slow|above/.test(x));\nconst BAND = { healthy: 0, crowded: 1, unproven: 2, saturated: 3 };\nall.sort((a, b) => (blocking(a.flags) - blocking(b.flags)) || (Number(!!b.meets_target) - Number(!!a.meets_target)) || (Number(!!b.local_warehouse) - Number(!!a.local_warehouse)) || (BAND[a.competition] - BAND[b.competition]) ||\n                   (b.est_profit_cad * Math.log2(2 + b.demand_score) - a.est_profit_cad * Math.log2(2 + a.demand_score)));\nconst top = all.slice(0, 8);\nconst facts = top.map((p, i) => ({ n: i + 1, pid: p.pid, name: p.name, category: p.category, cost_usd: p.cost_usd,\n  shipping: p.shipping, landed_cad: p.landed_cad, price_cad: p.price_cad, est_profit_cad: p.est_profit_cad,\n  listed_by_stores: p.listed_by_stores, competition: p.competition, meets_targets: p.meets_target, similar_count: p.similar_count, sold_count: p.sold_count, flags: p.flags }));\nconst instructions = 'You are the JARVIS e-commerce research analyst for a new Shopify store selling in Canada. ' +\n  'For each product below write one short note (max 25 words): who would buy it and the main risk. Use ONLY the facts given; ' +\n  'do not invent sales numbers, trends, reviews or prices. Reply with JSON only: {\"notes\":[{\"n\":1,\"note\":\"...\"}]}';\nreturn [{ json: { top, instructions, ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },\n  messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify(facts) }] } } }];\n"
+      }
+    },
+    {
+      "id": "r28",
+      "name": "Market check items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Market check plan, within the FREE SerpApi plan (250 searches a month).\n// Each fresh check = 2 searches (Google Shopping + Google Trends). Results are cached 10 days per\n// product name and reused. A daily allowance spreads the month's searches; 40 are kept in reserve\n// for the owner's own product-idea checks. Never goes over: when the budget is used up, products\n// are sent as \"market not checked\" and the owner is warned.\nconst CFG = { monthly: 250, reserve_for_ideas: 40, max_per_day: 10, cache_days: 10, per_check: 2, warn_below: 60 };\nconst STOP = /\\b(new|hot|sale|car styling|accessories|accessory|for|with|and|the|multi ?functional|portable|creative|household|tool|tools|1pc|pcs|set)\\b/gi;\nconst store = $getWorkflowStaticData('global');\nconst TZ = 'America/Toronto';\nconst now = new Date();\nconst month = now.toLocaleDateString('en-CA', { timeZone: TZ }).slice(0, 7);\nconst today = now.toLocaleDateString('en-CA', { timeZone: TZ });\nconst s = store.serp && store.serp.month === month ? store.serp : (store.serp = { month, used: 0, days: {} });\nstore.serpCache = store.serpCache || {};\n// Real numbers from the SerpApi account page (free, does not use a search). Fallback: own counter.\nconst acc = $input.first().json || {};\nconst hasKey = !acc.error && (acc.plan_searches_left !== undefined || acc.total_searches_left !== undefined);\nconst left = hasKey ? Number(acc.total_searches_left ?? acc.plan_searches_left) : Math.max(0, CFG.monthly - s.used);\nconst [y, m] = month.split('-').map(Number);\nconst daysInMonth = new Date(y, m, 0).getDate();\nconst daysLeft = daysInMonth - Number(today.slice(8, 10)) + 1;\nconst usedToday = s.days[today] || 0;\nlet allowance = Math.max(0, Math.min(CFG.max_per_day - usedToday, Math.floor((left - CFG.reserve_for_ideas) / daysLeft)));\nconst top = $('Shortlist').first().json.top || [];\nconst fresh = [], plan = [];\ntop.forEach((p, i) => {\n  const q = String(p.name).split(/[-,|(]/)[0].replace(STOP, ' ').replace(/\\s+/g, ' ').trim().split(' ').slice(0, 5).join(' ') || String(p.name).slice(0, 40);\n  const key = q.toLowerCase();\n  const c = store.serpCache[key];\n  if (c && Date.now() - c.at < CFG.cache_days * 864e5) { plan.push({ i, q, source: 'cache' }); return; }\n  if (fresh.some(f => f.q.toLowerCase() === key)) { plan.push({ i, q, source: 'same' }); return; }   // same name: one check\n  if (hasKey && allowance >= CFG.per_check) { allowance -= CFG.per_check; fresh.push({ i, q }); plan.push({ i, q, source: 'fresh' }); return; }\n  plan.push({ i, q, source: hasKey ? 'budget' : 'no_key' });\n});\n// Remove cache entries older than 30 days so the workflow data stays small.\nfor (const [k, v] of Object.entries(store.serpCache)) if (Date.now() - v.at > 30 * 864e5) delete store.serpCache[k];\nconst planned = fresh.length * CFG.per_check;\nconst leftAfter = left - planned;\nlet warning = null;\nif (!hasKey) warning = null;   // reported separately as \"SerpApi key missing\"\nelse if (leftAfter <= CFG.reserve_for_ideas) warning = `\u26a0\ufe0f SerpApi: only ${leftAfter} free searches left this month. I'm keeping them for your own product checks, so daily market checks use saved results until the 1st. I never go over the free plan without your OK.`;\nelse if (leftAfter < CFG.warn_below) warning = `\u26a0\ufe0f SerpApi: ${leftAfter} free searches left this month (plan 250). I'm using saved results more to stay free.`;\nconst meta = { month, today, has_key: hasKey, key_error: acc.error ? String(acc.error.message || acc.error).slice(0, 120) : null,\n               left_before: left, planned, left_after: leftAfter, plan, warning };\nstore.serpLastPlan = meta;\nif (!fresh.length) return [{ json: { none: true, meta } }];\nreturn fresh.map(f => ({ json: { ...f, meta } }));\n"
+      }
+    },
+    {
+      "id": "r29",
+      "name": "Google Shopping (Canada)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3160,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_shopping"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.q }}"
+            },
+            {
+              "name": "gl",
+              "value": "ca"
+            },
+            {
+              "name": "hl",
+              "value": "en"
+            },
+            {
+              "name": "location",
+              "value": "Canada"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "r30",
+      "name": "Google Trends (Canada)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "google_trends"
+            },
+            {
+              "name": "q",
+              "value": "={{ $('Market check items').item.json.q }}"
+            },
+            {
+              "name": "geo",
+              "value": "CA"
+            },
+            {
+              "name": "date",
+              "value": "today 3-m"
+            },
+            {
+              "name": "data_type",
+              "value": "TIMESERIES"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "r31",
+      "name": "Market verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3560,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Market check (SerpApi: Google Shopping Canada prices + Google Trends Canada, last 3 months).\n// Fresh results come from the two SerpApi nodes; others from the 10-day cache (see Market check items).\n// Pass = market price >= 2x our landed cost and searches not falling. \ud83d\udd25 = rising + 2.5x gap + owner targets.\n// Final list (max 5): passed first (\ud83d\udd25 first, then CA/US warehouse), then \"market not checked yet\"\n// (saving free searches) - products that failed the market check are dropped.\nconst store = $getWorkflowStaticData('global');\nconst s = $('Shortlist').first().json;\nconst metaItem = $('Market check items').first().json;\nconst meta = metaItem.meta;\nlet freshItems = [], shop = [], trends = [];\nif (!metaItem.none) {\n  freshItems = $('Market check items').all().map(i => i.json);\n  try { shop = $('Google Shopping (Canada)').all().map(i => i.json || {}); } catch (e) { shop = []; }\n  try { trends = $('Google Trends (Canada)').all().map(i => i.json || {}); } catch (e) { trends = []; }\n}\nconst USD_TO_CAD = 1.40;\nconst median = a => { const b = [...a].sort((x, y) => x - y); return b.length ? (b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : null; };\nfunction analyse(sh, tr) {\n  const results = sh.shopping_results || [];\n  const prices = results.map(r => Number(r.extracted_price)).filter(x => x > 0 && x < 1000);\n  const amazon = results.filter(r => /amazon/i.test(r.source || '')).map(r => Number(r.extracted_price)).filter(x => x > 0);\n  const tl = ((tr.interest_over_time || {}).timeline_data || []).map(t => Number(((t.values || [])[0] || {}).extracted_value) || 0);\n  let trend = null, trend_pct = null;\n  if (tl.length >= 8) {\n    const avg = a => a.reduce((x, y) => x + y, 0) / a.length;\n    const first = avg(tl.slice(0, 4)), last = avg(tl.slice(-4));\n    trend_pct = first > 0 ? Math.round((last - first) / first * 100) : (last > 0 ? 100 : 0);\n    trend = trend_pct >= 20 ? 'rising' : trend_pct <= -20 ? 'falling' : 'flat';\n  }\n  return { median_price_cad: prices.length >= 3 ? +median(prices).toFixed(2) : null, offers: prices.length,\n           amazon_median_cad: amazon.length ? +median(amazon).toFixed(2) : null, amazon_offers: amazon.length,\n           top_sources: [...new Set(results.map(r => r.source).filter(Boolean))].slice(0, 5), trend, trend_pct,\n           error: sh.error || tr.error ? String(sh.error || tr.error).slice(0, 100) : null };\n}\n// Store fresh results in the cache and count the searches used.\nlet usedNow = 0;\nfreshItems.forEach((f, k) => {\n  const sh = shop[k] || {}, tr = trends[k] || {};\n  if (shop[k]) usedNow++;\n  if (trends[k]) usedNow++;\n  const a = analyse(sh, tr);\n  if (!a.error && (a.median_price_cad !== null || a.trend !== null)) store.serpCache[f.q.toLowerCase()] = { at: Date.now(), ...a };\n  f.result = a;\n});\nif (store.serp && store.serp.month === meta.month) {\n  store.serp.used += usedNow;\n  store.serp.days[meta.today] = (store.serp.days[meta.today] || 0) + usedNow;\n}\nlet checked = 0;\nconst enriched = s.top.map((p, i) => {\n  const pl = meta.plan.find(x => x.i === i) || { q: '', source: 'no_key' };\n  let a = null;\n  if (pl.source === 'fresh') a = (freshItems.find(f => f.i === i) || {}).result || null;\n  if (pl.source === 'same') a = (freshItems.find(f => f.q.toLowerCase() === pl.q.toLowerCase()) || {}).result || null;\n  if (pl.source === 'cache') a = store.serpCache[pl.q.toLowerCase()] || null;\n  if (!a || (a.median_price_cad === null && a.trend === null)) {\n    return { ...p, market: { query: pl.q, checked: false, why: pl.source === 'budget' ? 'saving free searches' : pl.source === 'no_key' ? 'no SerpApi key' : (a && a.error) || 'no market data',\n                             median_price_cad: null, ratio: null, trend: null, hot: false, pass: false } };\n  }\n  checked++;\n  const ratio = a.median_price_cad ? +(a.median_price_cad / p.landed_cad).toFixed(1) : null;\n  const hot = ratio !== null && ratio >= 2.5 && a.trend === 'rising' && p.meets_target;\n  const pass = ratio !== null && ratio >= 2 && a.trend !== 'falling';\n  return { ...p, market: { query: pl.q, checked: true, cached: pl.source === 'cache', ...a, ratio, hot, pass } };\n});\nconst passed = enriched.filter(p => p.market.checked && p.market.pass)\n  .sort((a, b) => Number(b.market.hot) - Number(a.market.hot));   // otherwise keep the shortlist ranking\nconst unchecked = enriched.filter(p => !p.market.checked);\nconst failed = enriched.filter(p => p.market.checked && !p.market.pass);\nconst kept = [...passed, ...unchecked].slice(0, 5);\nconst marketOk = meta.has_key && checked > 0;\nconst facts = kept.map((p, n) => ({ n: n + 1, name: p.name, landed_cad: p.landed_cad, price_cad: p.price_cad, est_profit_cad: p.est_profit_cad,\n  warehouse: p.warehouse, market_median_price_cad: p.market.median_price_cad, price_gap: p.market.ratio, search_trend: p.market.trend, competition: p.competition, flags: p.flags }));\nconst instructions = 'You are the JARVIS e-commerce research analyst for a new Shopify store selling in Canada. ' +\n  'For each product write one short note (max 25 words): who would buy it, whether the market price leaves room, and the main risk. Use ONLY the facts given; ' +\n  'do not invent sales numbers, trends, reviews or prices. Reply with JSON only: {\"notes\":[{\"n\":1,\"note\":\"...\"}]}';\nreturn [{ json: { ...s, top: kept, all_checked: enriched, market_ok: marketOk, dropped: failed.length, unchecked: kept.filter(p => !p.market.checked).length,\n  serp: { has_key: meta.has_key, used_now: usedNow, left: meta.left_before - usedNow, warning: meta.warning, key_error: meta.key_error },\n  ai_body: { model: 'jarvis-free', max_tokens: 900, response_format: { type: 'json_object' },\n    messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify(facts) }] } } }];\n"
+      }
+    },
+    {
+      "id": "r16",
+      "name": "AI notes (free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://omniroute:20128/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ai_body) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r17",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// One photo message per product (caption = the facts), then a short summary message.\n// Works with or without the AI notes and with or without images.\nconst s = $('Market verdict').first().json;\nconst plan = $('Research plan').first().json;\nconst esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nlet notes = {};\ntry {\n  const r = $input.first().json || {};\n  const txt = (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content || '').replace(/^\\s*```(?:json)?|```\\s*$/g, '');\n  for (const x of (JSON.parse(txt).notes || [])) notes[x.n] = x.note;\n} catch (e) { /* AI notes are optional */ }\nconst items = s.top.map((p, i) => {\n  const lines = [\n    `<b>${i + 1}. ${esc(p.name)}</b>`,\n    `${{ healthy: '\ud83d\udfe2', crowded: '\ud83d\udfe0', saturated: '\ud83d\udd34', unproven: '\u26aa' }[p.competition] || ''} Competition: ${p.competition} (${p.listed_by_stores} stores on CJ` +\n      (p.similar_count ? `, ${p.similar_count} similar` : '') + ')' + (p.sold_count ? ` \u00b7 ${p.sold_count} sold` : ''),\n    `Cost ${p.cost_usd.toFixed(2)} USD + shipping ${p.shipping ? p.shipping.usd.toFixed(2) + ' USD (' + esc(p.shipping.name) + ', ' + esc(p.shipping.days) + ' days)' : 'unknown'}`,\n    `Landed ~${p.landed_cad} CAD | price ${p.price_cad} CAD | est. profit ${p.est_profit_cad} CAD (${p.margin_pct}%)`,\n    p.market && p.market.checked ? `${p.market.hot ? '\ud83d\udd25 ' : ''}Market${p.market.cached ? ' (saved check)' : ''}: ` +\n      (p.market.median_price_cad ? `others sell at ~${p.market.median_price_cad} CAD (${p.market.ratio}\u00d7 your cost)` : 'price n/a') +\n      (p.market.amazon_median_cad ? `, Amazon.ca ~${p.market.amazon_median_cad} CAD` : '') +\n      (p.market.trend ? `, Google searches ${p.market.trend} (${p.market.trend_pct > 0 ? '+' : ''}${p.market.trend_pct}% in 3 months)` : '')\n      : 'Market: not checked yet' + (p.market && p.market.why ? ' (' + esc(p.market.why) + ')' : ''),\n    `${p.local_warehouse ? '\ud83d\ude9a ' + esc(p.warehouse) + ' warehouse' : '\ud83d\udce6 ships from China'} \u00b7 CJ SKU ${esc(p.sku || p.pid)}`,\n    p.meets_target ? '\ud83c\udfaf Meets your targets (10+ CAD profit, 10 days or less)' : '\u2716\ufe0f Misses target: ' + esc((p.target_misses || []).join(', ')),\n  ];\n  if (p.flags.length) lines.push('Watch: ' + esc(p.flags.join('; ')));\n  if (notes[i + 1]) lines.push('<i>' + esc(notes[i + 1]) + '</i>');\n  return { json: { photo: p.image || '', has_photo: !!p.image, caption: lines.join('\\n').slice(0, 1000), text: lines.join('\\n') } };\n});\nconst day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto', weekday: 'long', month: 'long', day: 'numeric' });\nconst sp = s.serp || {};\nconst summary = `<b>JARVIS daily products</b> \u00b7 ${esc(day)} (${esc(plan.keywords.join(', '))})\\n` +\n  (s.top.length ? s.top.length + ' products above, best first. ' : 'No product passed today.\\n') +\n  (sp.has_key ? (s.dropped ? s.dropped + ' removed by the market check (market price too low or searches falling). ' : '') +\n      (s.unchecked ? s.unchecked + ' not market-checked yet (saving free searches, or no market data). ' : '') + `SerpApi: ${sp.left} free searches left this month.\\n`\n    : 'Market check off: SerpApi key missing or not working' + (sp.key_error ? ' (' + esc(sp.key_error) + ')' : '') + '.\\n') +\n  (sp.warning ? esc(sp.warning) + '\\n' : '') +\n  '\ud83d\udd25 searches rising + others sell at 2.5x+ your cost \u00b7 \ud83c\udfaf 10+ CAD profit and 10 days or less \u00b7 \ud83d\ude9a US/Canada warehouse (fast for Black Friday and Christmas)\\n' +\n  '\ud83d\udfe2 healthy \u00b7 \ud83d\udfe0 crowded \u00b7 \ud83d\udd34 saturated \u00b7 \u26aa unproven \u00b7 \u26a0\ufe0f may need a certification\\n' +\n  'Estimates from CJ quotes (USD to CAD at 1.40), before sales tax and duties. Nothing was ordered or published.\\n' +\n  'To check your own idea, send me a link, a photo or a name. Say \"resend the products\" any time.';\nif (!items.length) return [{ json: { photo: '', has_photo: false, caption: '', text: '', summary, index: 0 } }];   // nothing passed: summary only\nreturn items.map((it, i) => ({ json: { ...it.json, summary, index: i } }));\n"
+      }
+    },
+    {
+      "id": "r18",
+      "name": "Nothing-found report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Nothing passed the screen: tell the owner why instead of staying silent.\nconst r = $input.first().json || {};\nconst plan = $('Research plan').first().json;\nconst why = (r.notes && r.notes.length) ? r.notes.join('; ') : 'no product passed the filters (price, excluded categories)';\nreturn [{ json: { report: 'JARVIS product research (' + plan.keywords.join(', ') + '): no candidates this time. ' + why.replace(/[<>&]/g, ' ') } }];\n"
+      }
+    },
+    {
+      "id": "r20",
+      "name": "Send product photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3520,
+        300
+      ],
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "6203634137",
+        "binaryData": false,
+        "file": "={{ $json.photo }}",
+        "additionalFields": {
+          "caption": "={{ $json.caption }}",
+          "parse_mode": "HTML"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r22",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// After the product photos (runs once): the summary, plus the full text of any product whose photo\n// could not be sent (no image, or Telegram rejected it), so nothing is lost.\nconst reports = $('Report').all().map(i => i.json);\nconst results = $input.all().map(i => i.json || {});\nconst failed = reports.filter((r, i) => r.text && (!results[i] || results[i].error || !r.has_photo));\nlet msg = reports.length ? reports[0].summary : '';\nif (failed.length) msg = failed.map(r => r.text).join('\\n\\n') + '\\n\\n' + msg;\nreturn [{ json: { report: msg.slice(0, 4000) } }];\n"
+      }
+    },
+    {
+      "id": "r23",
+      "name": "What JARVIS says",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// What JARVIS says out loud after the report (spoken by the free Piper voice on the server). Short, factual, and only about what really happened.\nlet top = [];\ntry { top = $('Market verdict').first().json.top || []; } catch (e) { top = []; }\nconst hNum = Number(new Date().toLocaleString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })) % 24;\nconst hour = ((hNum % 12) || 12) + (hNum < 12 ? ' AM' : ' PM');\nconst NAME = 'Zohrab';\nconst greet = hNum < 12 ? 'Good morning' : hNum < 18 ? 'Good afternoon' : 'Good evening';\nlet text;\nif (top.length) {\n  const hits = top.filter(p => p.meets_target).length;\n  const hot = top.filter(p => p.market && p.market.hot).length;\n  const best = [...top].sort((a, b) => b.est_profit_cad - a.est_profit_cad)[0];\n  const shortName = best.name.split(/[-,|]/)[0].trim().split(/\\s+/).slice(0, 6).join(' ');\n  text = `${greet}, ${NAME}. It's ${hour}. I've just sent today's products to your Telegram: ${top.length} product${top.length === 1 ? '' : 's'}, with photos, shipping times to Canada and profit estimates. ` +\n         `The highest estimated profit is about ${Math.round(best.est_profit_cad)} dollars per sale, on the ${shortName}. ` +\n         (hot ? `${hot} look${hot === 1 ? 's' : ''} hot: searches rising and a good price gap. ` : '') + (hits ? `${hits} meet${hits === 1 ? 's' : ''} your targets. ` : 'None met both of your targets today. ') + `These are estimates only; nothing has been ordered. Have a look when you have a moment.`;\n} else {\n  text = `${greet}, ${NAME}. I ran today's product research, but no product passed the filters this time. The details are in your Telegram.`;\n}\nreturn [{ json: { tts_body: { text: text.slice(0, 1200), lang: 'en', format: 'mp3' }, spoken_text: text } }];\n"
+      }
+    },
+    {
+      "id": "r24",
+      "name": "JARVIS voice (Piper, free)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4620,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://jarvis-tts:5000/speak",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.tts_body) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "r25",
+      "name": "Send voice message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4840,
+        0
+      ],
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "6203634137",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "fileName": "JARVIS.mp3",
+          "title": "JARVIS",
+          "performer": "JARVIS"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "r19",
+      "name": "Send report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4180,
+        100
+      ],
+      "parameters": {
+        "chatId": "6203634137",
+        "text": "={{ $json.report }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      }
+    },
+    {
+      "id": "r26",
+      "name": "Memory text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Two memory rows: a short summary (screen, briefing, JARVIS's answers) and the full report\n// (kind research_report) so \"resend the products\" works without searching again.\nlet top = [];\ntry { top = $('Market verdict').first().json.top || []; } catch (e) { top = []; }\nconst plan = $('Research plan').first().json;\nconst day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' });\nconst list = top.map((p, i) => `${i + 1}. ${p.name.split(/[-,|]/)[0].trim().slice(0, 60)} (CJ SKU ${p.sku || p.pid}, ${p.warehouse || 'CN'} warehouse, landed ${p.landed_cad} CAD, price ${p.price_cad} CAD, est. profit ${p.est_profit_cad} CAD, competition ${p.competition}${p.meets_target ? ', meets targets' : ''}${p.market && p.market.median_price_cad ? ', market ~' + p.market.median_price_cad + ' CAD' : ''}${p.market && p.market.trend ? ', searches ' + p.market.trend : ''}${p.market && p.market.hot ? ', HOT' : ''})`).join('; ');\nconst summary = `Daily product research sent to the owner's Telegram on ${day} at 10:00 or on request (themes: ${plan.keywords.join(', ')}), with photos and a voice message. ` +\n  (top.length ? `Top products: ${list}. Estimates only; nothing ordered.` : 'No product passed the filters.');\nlet reports = [];\ntry { reports = $('Report').all().map(i => i.json); } catch (e) { reports = []; }\nlet fallback = '';\ntry { fallback = $('Nothing-found report').first().json.report || ''; } catch (e) { fallback = ''; }\nconst full = { day, keywords: plan.keywords,\n  items: reports.filter(r => r.text).map(r => ({ photo: r.photo || '', caption: r.caption, text: r.text })),\n  summary: reports.length ? reports[0].summary : fallback };\nreturn [{ json: { kind: 'research', summary: summary.slice(0, 1800) } },\n        { json: { kind: 'research_report', summary: JSON.stringify(full).slice(0, 20000) } }];\n"
+      }
+    },
+    {
+      "id": "r27",
+      "name": "Save to memory",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4400,
+        320
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "jarvis_memory"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every day 10:00": {
+      "main": [
+        [
+          {
+            "node": "Research plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (run or resend)": {
+      "main": [
+        [
+          {
+            "node": "Latest saved report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Latest saved report": {
+      "main": [
+        [
+          {
+            "node": "Run or resend?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run or resend?": {
+      "main": [
+        [
+          {
+            "node": "Answer the caller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer the caller": {
+      "main": [
+        [
+          {
+            "node": "Run now?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now?": {
+      "main": [
+        [
+          {
+            "node": "Research plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resend?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resend?": {
+      "main": [
+        [
+          {
+            "node": "Resend saved report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resend saved report": {
+      "main": [
+        [
+          {
+            "node": "Send saved photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send saved photo": {
+      "main": [
+        [
+          {
+            "node": "Resend summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resend summary": {
+      "main": [
+        [
+          {
+            "node": "Send resent report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now (manual)": {
+      "main": [
+        [
+          {
+            "node": "Research plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research plan": {
+      "main": [
+        [
+          {
+            "node": "Need a new CJ token?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need a new CJ token?": {
+      "main": [
+        [
+          {
+            "node": "CJ get token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ get token": {
+      "main": [
+        [
+          {
+            "node": "Save token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save token": {
+      "main": [
+        [
+          {
+            "node": "Searches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Searches": {
+      "main": [
+        [
+          {
+            "node": "CJ product search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ product search": {
+      "main": [
+        [
+          {
+            "node": "Screen products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screen products": {
+      "main": [
+        [
+          {
+            "node": "Nothing found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nothing found?": {
+      "main": [
+        [
+          {
+            "node": "Nothing-found report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CJ variants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ variants": {
+      "main": [
+        [
+          {
+            "node": "Pick variant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick variant": {
+      "main": [
+        [
+          {
+            "node": "CJ shipping to Canada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CJ shipping to Canada": {
+      "main": [
+        [
+          {
+            "node": "Finance (no AI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finance (no AI)": {
+      "main": [
+        [
+          {
+            "node": "Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shortlist": {
+      "main": [
+        [
+          {
+            "node": "SerpApi account (free)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi account (free)": {
+      "main": [
+        [
+          {
+            "node": "Market check items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market check items": {
+      "main": [
+        [
+          {
+            "node": "Fresh market calls?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fresh market calls?": {
+      "main": [
+        [
+          {
+            "node": "Google Shopping (Canada)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Market verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Shopping (Canada)": {
+      "main": [
+        [
+          {
+            "node": "Google Trends (Canada)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Trends (Canada)": {
+      "main": [
+        [
+          {
+            "node": "Market verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Market verdict": {
+      "main": [
+        [
+          {
+            "node": "AI notes (free)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI notes (free)": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report": {
+      "main": [
+        [
+          {
+            "node": "Send product photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send product photo": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary": {
+      "main": [
+        [
+          {
+            "node": "Send report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Memory text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nothing-found report": {
+      "main": [
+        [
+          {
+            "node": "Send report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Memory text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send report": {
+      "main": [
+        [
+          {
+            "node": "What JARVIS says",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What JARVIS says": {
+      "main": [
+        [
+          {
+            "node": "JARVIS voice (Piper, free)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JARVIS voice (Piper, free)": {
+      "main": [
+        [
+          {
+            "node": "Send voice message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory text": {
+      "main": [
+        [
+          {
+            "node": "Save to memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/Toronto"
+  },
+  "pinData": {}
+}

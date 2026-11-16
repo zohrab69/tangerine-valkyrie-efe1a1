@@ -1,4 +1,5 @@
 """JARVIS voice service: POST /speak {"text": "...", "lang": "en"|"fr", "format": "wav"|"mp3"} -> audio.
+POST /video {"images": [...], "hook": "...", "lines": [...], "price": "...", "brand": "..."} -> mp4 (see video.py).
 
 English uses Kokoro (human-like), French uses Piper. If Kokoro cannot load, English falls back to Piper.
 Voice: env JARVIS_VOICE (Kokoro voice id, e.g. bm_george, bm_lewis, am_michael). Speed: env JARVIS_SPEED.
@@ -14,6 +15,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from piper import PiperVoice, SynthesisConfig
 
+import video
+
 try:
     import numpy as np
     import onnxruntime as rt
@@ -25,6 +28,7 @@ VOICE_DIR = os.environ.get("VOICE_DIR", "/voices")
 VOICES = {"en": "en_GB-alan-medium", "fr": "fr_FR-tom-medium"}
 MAX_CHARS = 1500
 LOCK = threading.Lock()          # one synthesis at a time: keeps memory and CPU low
+VIDEO_LOCK = threading.Lock()
 _loaded = {}
 KOKORO_VOICE = os.environ.get("JARVIS_VOICE", "am_adam")
 SPEED = float(os.environ.get("JARVIS_SPEED", "1.05"))
@@ -95,6 +99,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found", "text/plain")
 
     def do_POST(self):
+        if self.path.rstrip("/") == "/video":
+            return self._video()
         if self.path.rstrip("/") not in ("/speak", "/api/speak"):
             return self._send(404, b"not found", "text/plain")
         try:
@@ -112,6 +118,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, wav_bytes, "audio/wav")
         except Exception as e:  # report, never crash the service
             return self._send(500, ("error: " + type(e).__name__).encode(), "text/plain")
+
+    def _video(self):
+        if not VIDEO_LOCK.acquire(timeout=240):          # one video at a time (2 vCPU server)
+            return self._send(503, b"busy", "text/plain")
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 20000:
+                return self._send(413, b"too large", "text/plain")
+            req = json.loads(self.rfile.read(n) or b"{}")
+            mp4 = video.make_video(req, lambda t: synth_wav(" ".join(str(t).split())[:300], "en"))
+            return self._send(200, mp4, "video/mp4")
+        except Exception as e:
+            print("video failed:", type(e).__name__, str(e)[:200], flush=True)
+            return self._send(500, ("error: " + type(e).__name__).encode(), "text/plain")
+        finally:
+            VIDEO_LOCK.release()
 
     def log_message(self, fmt, *args):  # keep logs short; never log the spoken text
         pass
