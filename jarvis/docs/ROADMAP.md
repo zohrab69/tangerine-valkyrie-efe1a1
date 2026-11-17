@@ -17,7 +17,8 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] Idea check real run ("silicone garlic press"): 3 CJ suppliers (one US warehouse), 40 market offers, Amazon.ca ~13.66 CAD, verdict NOT RECOMMENDED (market 1.4x our cost); owner declined
 - [x] Screen: free models took up to 94 s (2 AI calls around a tool) -> "what's selling/viral today" answered without AI, screen waits 3 min; patch applied by the owner
 - [ ] To fix: suggested price when the market is too low (say "not profitable" instead of 2x market), supplier without a shipping quote listed last
-- [ ] Not yet tested live: Approve -> Shopify listing + 3 videos, photo/link idea checks, Shop v2 new-order alert (next real order), server reboot recovery
+- [x] Server reboot 2026-11-17: everything came back by itself; JARVIS answered on Telegram with today's research and the briefing (conversation memory reset, as expected)
+- [ ] Not yet tested live: Approve -> Shopify listing + 3 videos, photo/link idea checks, Shop v2 new-order alert (next real order)
 
 Owner decisions: electronics only **without batteries or chargers**, **no beauty** for now, flag anything that may need a certification;
 research **daily** on the **free SerpApi plan**; **no Keepa** until Amazon starts; Black Friday and Christmas on **Shopify with CJ**,
