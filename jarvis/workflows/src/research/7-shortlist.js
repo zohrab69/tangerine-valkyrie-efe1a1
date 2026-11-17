@@ -1,7 +1,9 @@
 // Rank: no blocking flags first, then products meeting the owner's targets, then CA/US warehouse (holiday season),
 // then competition band (healthy > crowded > unproven > saturated), then profit x demand.
 // Keeps 8 candidates: the market check (SerpApi, limited free searches) then picks the final 5.
-const all = $input.all().map(i => i.json);
+let all = $input.all().map(i => i.json);
+// No shipping quote to Canada = the numbers are not real: keep such products out when others have a quote.
+if (all.some(p => p.shipping)) all = all.filter(p => p.shipping);
 const blocking = f => f.some(x => /no shipping|slow|above/.test(x));
 const BAND = { healthy: 0, crowded: 1, unproven: 2, saturated: 3 };
 all.sort((a, b) => (blocking(a.flags) - blocking(b.flags)) || (Number(!!b.meets_target) - Number(!!a.meets_target)) || (Number(!!b.local_warehouse) - Number(!!a.local_warehouse)) || (BAND[a.competition] - BAND[b.competition]) ||

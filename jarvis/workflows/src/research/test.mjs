@@ -27,7 +27,12 @@ console.log('screened', N['Screen products'].map(x => x.json.pid + ':' + x.json.
 const variants = { P6: [{ vid: 'V6', variantSellPrice: 2.2 }], P9: [{ vid: 'V9', variantSellPrice: 3 }], P5: [{ vid: 'V5', variantNameEn: 'Blue', variantSellPrice: 1.95, variantWeight: 60 }], P1: [{ vid: 'V1', variantSellPrice: 3.2, variantWeight: 80 }], P4: [] };
 N['Pick variant'] = run('5-pick-variant.js', N['Screen products'].map(p => ({ json: { result: true, data: variants[p.json.pid] } })), N, sd);
 const freight = { V6: [{ logisticName: 'USPS', logisticPrice: 6, logisticAging: '4-7' }], V9: [{ logisticName: 'CJPacket', logisticPrice: 4, logisticAging: '7-10' }], V5: [{ logisticName: 'CJPacket Ordinary', logisticPrice: 4.1, logisticAging: '8-15' }, { logisticName: 'YunExpress', logisticPrice: 3.0, logisticAging: '15-30' }], V1: [{ logisticName: 'CJPacket', logisticPrice: 5.2, logisticAging: '7-12' }] };
-N['Finance'] = run('6-finance.js', N['Pick variant'].map(p => ({ json: { result: true, data: freight[p.json.vid] || [] } })), N, sd);
+// local warehouse quotes (P6 from US: CJ gives none to Canada) + backup quotes from China
+N['CJ shipping to Canada'] = N['Pick variant'].map(p => ({ json: { result: true, data: p.json.vid === 'V6' ? [] : (freight[p.json.vid] || []) } }));
+const cnBackup = N['Pick variant'].map(p => ({ json: { result: true, data: p.json.vid === 'V6' ? [{ logisticName: 'CJPacket', logisticPrice: 5.5, logisticAging: '8-12' }] : [] } }));
+N['Finance'] = run('6-finance.js', cnBackup, N, sd);
+const p6 = N['Finance'].find(x => x.json.pid === 'P6').json;
+console.log('P6 fallback:', p6.warehouse, p6.shipping && p6.shipping.name, p6.flags.filter(f => /China/.test(f)));
 N['Finance'].forEach(x => console.log(x.json.pid, x.json.shipping && x.json.shipping.name, 'landed', x.json.landed_cad, 'price', x.json.price_cad, 'profit', x.json.est_profit_cad, x.json.flags));
 N['Shortlist'] = run('7-shortlist.js', N['Finance'], N, sd);
 console.log('order', N['Shortlist'][0].json.top.map(p => p.pid));

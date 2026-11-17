@@ -15,6 +15,7 @@ if (!metaItem.none) {
 }
 const USD_TO_CAD = 1.40;
 const median = a => { const b = [...a].sort((x, y) => x - y); return b.length ? (b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : null; };
+const errText = e => String((e && (e.message || e.description)) || (typeof e === 'string' ? e : JSON.stringify(e))).slice(0, 100);
 function analyse(sh, tr) {
   const results = sh.shopping_results || [];
   const prices = results.map(r => Number(r.extracted_price)).filter(x => x > 0 && x < 1000);
@@ -30,7 +31,7 @@ function analyse(sh, tr) {
   return { median_price_cad: prices.length >= 3 ? +median(prices).toFixed(2) : null, offers: prices.length,
            amazon_median_cad: amazon.length ? +median(amazon).toFixed(2) : null, amazon_offers: amazon.length,
            top_sources: [...new Set(results.map(r => r.source).filter(Boolean))].slice(0, 5), trend, trend_pct,
-           error: sh.error || tr.error ? String(sh.error || tr.error).slice(0, 100) : null };
+           error: sh.error || tr.error ? errText(sh.error || tr.error) : null };
 }
 // Store fresh results in the cache and count the searches used.
 let usedNow = 0;

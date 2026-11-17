@@ -13,9 +13,15 @@ const F = {
   target_days: 10,
 };
 const prods = $('Pick variant').all().map(i => i.json);
+const local = $('CJ shipping to Canada').all().map(i => i.json || {});
 const out = [];
+// Shipping quote: from the product's warehouse (CA/US) first; when CJ gives none to Canada from there,
+// the backup quote from China is used and the product is marked as shipping from China.
 $input.all().forEach((item, idx) => {
-  const p = prods[idx]; const r = item.json || {};
+  const p = prods[idx];
+  const toOpts = r => (Array.isArray(r && r.data) ? r.data : []).filter(o => parseFloat(o.logisticPrice ?? o.price) >= 0);
+  let r = local[idx] || {}, from = p.warehouse || 'CN';
+  if (!toOpts(r).length && from !== 'CN' && toOpts(item.json).length) { r = item.json; p.warehouse_note = 'CJ does not ship this to Canada from the ' + from + ' warehouse; quote is from China'; from = 'CN'; p.warehouse = 'CN'; }
   const opts = (Array.isArray(r.data) ? r.data : []).map(o => ({
     name: o.logisticName || o.name || '?', usd: parseFloat(o.logisticPrice ?? o.price), days: String(o.logisticAging || o.aging || '')
   })).filter(o => o.usd >= 0);
@@ -38,6 +44,7 @@ $input.all().forEach((item, idx) => {
   if (p.competition === 'crowded') flags.push('crowded: ' + p.listed_by_stores + ' stores already sell it');
   if (p.competition === 'saturated') flags.push('saturated: ' + p.listed_by_stores + ' stores sell it, hard to stand out');
   (p.certification || []).forEach(c => flags.push('⚠️ ' + c));
+  if (p.warehouse_note) flags.push(p.warehouse_note);
   if (p.similar_count >= 4) flags.push(p.similar_count + ' near-identical copies on CJ');
   const days = ship ? maxDays(ship) : 99;
   const meets_target = !!ship && profit >= F.target_profit_cad && days <= F.target_days;
