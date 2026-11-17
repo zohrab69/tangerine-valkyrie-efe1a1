@@ -24,7 +24,8 @@ if (j.message) {                                   // Telegram
 text = text.slice(0, 2000);
 const url = (text.match(/https?:\/\/\S+/) || [null])[0];
 const CHECK = /^\s*(check|vérifie|verifie|analyse|analyze|research|is this (a )?good|what about|idée|idea)\b[:\s-]*/i;
-const PRODUCTS = /\b(send|resend|show|give)( me)?( the| today'?s| todays| the latest)? (top )?products\b|\b(today'?s|todays|daily) products\b|\b(envoie|renvoie|montre)(-moi)? (les )?produits\b|\bproduits du jour\b/i;
+// "what's selling / viral / trending today" also goes straight to the products (fast, no AI: the free AI can take 40-90 s).
+const PRODUCTS = /\bwhat'?s (selling|viral|trending|hot|popular)\b|\bwhat is (selling|viral|trending|hot|popular)\b|\b(qu'?est-ce qui|quoi) (se vend|est viral|est tendance)\b|\b(send|resend|show|give)( me)?( the| today'?s| todays| the latest)? (top )?products\b|\b(today'?s|todays|daily) products\b|\b(envoie|renvoie|montre)(-moi)? (les )?produits\b|\bproduits du jour\b/i;
 let route = 'chat', idea = null;
 if (channel === 'telegram' && photo) { route = 'idea'; idea = { kind: 'photo', file_id: photo, text: text || null }; }
 else if (channel === 'telegram' && url) { route = 'idea'; idea = { kind: 'link', url, text: text.replace(url, '').trim() || null }; }

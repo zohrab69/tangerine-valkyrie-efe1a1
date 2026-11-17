@@ -346,7 +346,7 @@
     busy = true; heard.className = 'heard'; heard.textContent = text; say.textContent = '';
     addMsg('You', text);
     setState('thinking', lang === 'fr' ? 'je réfléchis' : 'thinking');
-    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 90000);
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 180000);   // free AI can be slow
     const t0 = performance.now(); askStart = t0;
     try {
       const r = await fetch('api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
