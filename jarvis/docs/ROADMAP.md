@@ -7,6 +7,18 @@ before the store goes live) → 7 (VeraClean) → 8 → 10. The numbers are kept
 Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your laptop · `[ ]` planned
 
 ## Update 2026-11-16 (owner's doc "Jarvis Multi-Agent Team", plan approved)
+
+**Live on the server 2026-11-17 (verified by the owner):**
+- [x] Server: voice/video service rebuilt, `ops-247.sh` (all containers restart=unless-stopped, watchdog, nightly backup), encrypted backups to Telegram, UptimeRobot monitor Up
+- [x] Keys: SerpApi, OmniRoute (OpenAI format), Shopify Dev Dashboard app "JARVIS" installed on rangeo-ca (client credentials token works: shop name returned)
+- [x] Published: Alerts v2 (health check silent = all OK), Research v2, Briefing v2, Idea v1, Shop v2, Brain v1; v1 versions unpublished
+- [x] Research v2 real runs: 5 products, market check removed 1, SerpApi 240 then 230 searches left; daily 10:00 run happened on its own 2026-11-17
+- [x] Agent with real free models: "what's our plan for Black Friday?" answered from the plan; "what's selling today?" called products_today and resent the saved report
+- [x] Idea check real run ("silicone garlic press"): 3 CJ suppliers (one US warehouse), 40 market offers, Amazon.ca ~13.66 CAD, verdict NOT RECOMMENDED (market 1.4x our cost); owner declined
+- [x] Screen: free models took up to 94 s (2 AI calls around a tool) -> "what's selling/viral today" answered without AI, screen waits 3 min; patch applied by the owner
+- [ ] To fix: suggested price when the market is too low (say "not profitable" instead of 2x market), supplier without a shipping quote listed last
+- [ ] Not yet tested live: Approve -> Shopify listing + 3 videos, photo/link idea checks, Shop v2 new-order alert (next real order), server reboot recovery
+
 Owner decisions: electronics only **without batteries or chargers**, **no beauty** for now, flag anything that may need a certification;
 research **daily** on the **free SerpApi plan**; **no Keepa** until Amazon starts; Black Friday and Christmas on **Shopify with CJ**,
 preferring **US or Canada warehouses**; the owner opens his Amazon seller account in parallel.
