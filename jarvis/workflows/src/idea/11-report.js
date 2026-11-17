@@ -18,12 +18,13 @@ lines.push('TikTok Shop: no official data available (JARVIS does not scrape TikT
 if (v.suppliers.length) {
   lines.push('', '<b>Best suppliers (CJ)</b>');
   v.suppliers.forEach((s, i) => lines.push(`${i + 1}. ${esc(s.name.slice(0, 70))} · ${s.warehouse === 'CN' ? '📦 China' : '🚚 ' + s.warehouse} · ${s.cost_usd.toFixed(2)} USD + ship ` +
-    (s.shipping ? `${s.shipping.usd.toFixed(2)} USD (${esc(s.shipping.days)} days)` : 'unknown') + ` = ${s.landed_cad} CAD · ${s.listed_by_stores} stores · SKU ${esc(s.sku)}`));
+    (s.shipping ? `${s.shipping.usd.toFixed(2)} USD (${esc(s.shipping.days)} days) = ${s.landed_cad} CAD` : '? (no shipping quote to Canada from this warehouse)') + ` · ${s.listed_by_stores} stores · SKU ${esc(s.sku)}`));
 }
 if (b) {
   lines.push('', '<b>Money (best supplier, estimates)</b>',
     `Supplier ${b.cost_usd.toFixed(2)} USD + shipping ${b.shipping ? b.shipping.usd.toFixed(2) : '?'} USD = landed ${b.landed_cad} CAD`,
-    `Suggested price: <b>${v.price_cad} CAD</b> (shipping included)`,
+    v.market_too_low ? `Price: others sell at ~${m.median_price_cad} CAD. At that price you'd earn only <b>${v.profit_cad} CAD</b>; to earn 10+ CAD you'd need ${v.price_needed} CAD, above the market. ⛔ Not profitable.`
+      : `Suggested price: <b>${v.price_cad} CAD</b> (shipping included)`,
     `Fees: payment ${v.fees_cad} CAD + 5% returns allowance`,
     `Profit per sale: <b>${v.profit_cad} CAD</b> (${v.profit_with_ads_cad} CAD if 20% goes to ads)`,
     `Marketing: 3 videos by JARVIS = 0 CAD · small ad test ${v.marketing.ad_test_cad} CAD (5 days × 10 CAD, only if you approve)` + (v.marketing.breakeven_sales ? ` · pays back after ${v.marketing.breakeven_sales} sales` : ''));

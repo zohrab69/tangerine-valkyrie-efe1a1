@@ -17,3 +17,18 @@ ok(/recognise/.test(run('4-identity.js', [{ json: { error: 'x' } }], N)[0].json.
 N['Identify request'] = [{ json: { id: 'i', kind: 'name', text: 'kids night light', had_image: false, page: {} } }];
 const idt = run('4-identity.js', [{ json: { choices: [{ message: { content: '{"name":"Night light","search_query":"night light","has_battery_or_charger":false}' } }] } }], N)[0].json;
 ok(idt.excluded && /kids/.test(idt.excluded) && idt.certification.length, 'kids excluded + electrical flagged: ' + idt.excluded);
+// link that cannot be read and no text -> ask for the name
+N['Identify request'] = [{ json: { id: 'i', kind: 'link', url: 'https://a.co/d/x', text: '', had_image: false, page: { title: null, site: 'a.co' } } }];
+ok(/couldn't read that link/.test(run('4-identity.js', [{ json: { error: 'x' } }], N)[0].json.problem), 'unreadable Amazon link = ask for the name');
+// market too low -> NO, honest price
+N['Product identity'] = [{ json: { id: 'i', name: 'Garlic press', q: 'garlic press', excluded: null, certification: [] } }];
+N['Supplier costs'] = [{ json: { suppliers: [{ name: 'Press', warehouse: 'CN', cost_usd: 0.9, landed_cad: 8.02, days: 15, shipping: { usd: 4.83, days: '7-15' }, listed_by_stores: 5996, competition: 'crowded', certification: [] },
+  { name: 'Grinder', warehouse: 'US', cost_usd: 0.25, landed_cad: 0.35, days: null, shipping: null, listed_by_stores: 1344, competition: 'healthy', certification: [] }] } }];
+N['Market plan'] = [{ json: { q: 'garlic press', source: 'cache' } }];
+const sdm = { serpCache: { 'garlic press': { at: Date.now(), median_price_cad: 10.84, offers: 40, amazon_median_cad: 13.66, amazon_offers: 20, others: [], trend: 'flat', trend_pct: 0 } } };
+const v = run('10-verdict.js', [{ json: {} }], N, sdm)[0].json;
+ok(v.verdict === 'NO' && v.market_too_low && v.price_cad === 10.99 && v.price_needed === 20.99, 'market too low: NO, price 10.99, would need ' + v.price_needed + ', profit ' + v.profit_cad);
+N['Verdict'] = [{ json: v }];
+const rep = run('11-report.js', [{ json: { error: 'x' } }], N)[0].json.report;
+ok(/Not profitable/.test(rep) && /no shipping quote/.test(rep), 'report says not profitable + no shipping quote');
+console.log(rep.split('\n').filter(l => /Price:|no shipping|Not profitable/.test(l)).join('\n'));

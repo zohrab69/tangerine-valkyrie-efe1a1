@@ -28,12 +28,19 @@ if (plan.source === 'fresh') {
 const sup = costs.suppliers || [];
 const best = sup[0] || null;
 const R = x => Math.round(x * 100) / 100;
-let price = null, fees = 0, profit = null, profit_ads = null;
+let price = null, fees = 0, profit = null, profit_ads = null, market_too_low = false, price_needed = null;
 if (best) {
   const L = best.landed_cad;
   const floor = Math.max(L * 2, L + 12);
-  price = m && m.median_price_cad ? Math.max(floor, Math.min(m.median_price_cad * 0.95, L * 3.5)) : Math.max(L * 2.5, L + 12);
-  price = Math.ceil(price) - 0.01;
+  if (m && m.median_price_cad && floor > m.median_price_cad * 1.05) {
+    // Market too low: we would have to charge more than others do. Show the honest profit at the market price.
+    market_too_low = true;
+    price_needed = Math.ceil(floor) - 0.01;
+    price = Math.max(0.99, Math.ceil(m.median_price_cad) - 0.01);
+  } else {
+    price = m && m.median_price_cad ? Math.max(floor, Math.min(m.median_price_cad * 0.95, L * 3.5)) : Math.max(L * 2.5, L + 12);
+    price = Math.ceil(price) - 0.01;
+  }
   fees = price * 0.029 + 0.30;
   profit = R(price - L - fees - price * 0.05);
   profit_ads = R(profit - price * 0.20);
@@ -63,8 +70,9 @@ if (best && (best.days || 99) > 10) risks.push('Delivery over 10 days (' + (best
 if (m && m.trend === 'falling') risks.push('Google searches in Canada are falling');
 if (!m || (m.median_price_cad === null && m.trend === null)) risks.push('No market data (SerpApi)');
 if (ratio !== null && ratio < 2) risks.push('Market price is only ' + ratio + 'x our cost: thin room');
+if (market_too_low) risks.push(`Not profitable at the market price: others sell at ~${m.median_price_cad} CAD; we would need ${price_needed} CAD to earn 10+ CAD`);
 let verdict = 'MAYBE';
-if (p.excluded || !best || (ratio !== null && ratio < 1.6) || (profit !== null && profit < 5)) verdict = 'NO';
+if (p.excluded || !best || market_too_low || (ratio !== null && ratio < 1.6) || (profit !== null && profit < 5)) verdict = 'NO';
 else if (ratio !== null && ratio >= 2 && m.trend !== 'falling' && profit >= 10 && (best.days || 99) <= 10 && !risks.some(r => r.startsWith('Certification'))) verdict = 'GOOD';   // certification to check first = MAYBE
 const sys = 'IDEA_LISTING. You write for Rangéo, a Canadian online store (Quebec): French first, then English. Original wording only (never copy the supplier text), ' +
   'no health or safety claims, no brand names, no fake reviews or fake scarcity. Reply with JSON only: {"title_fr": "max 70 chars", "title_en": "max 70 chars", ' +
@@ -74,7 +82,7 @@ const sys = 'IDEA_LISTING. You write for Rangéo, a Canadian online store (Quebe
   '(exactly 3 videos with DIFFERENT hooks: a problem hook, a surprise/demo hook, a gift hook for Christmas). English for the videos.}';
 const facts = { product: p.name, supplier_title: best ? best.name : null, price_cad: price, warehouse: best ? best.warehouse : null, delivery_days: best ? best.shipping && best.shipping.days : null };
 return [{ json: { id: p.id, name: p.name, q: p.q, kind: p.kind, url: p.url, page: p.page, verdict, risks, suppliers: sup, best, market: m, market_source: plan.source,
-  serp_warning: plan.warning, ratio, price_cad: price, fees_cad: R(fees), profit_cad: profit, profit_with_ads_cad: profit_ads,
+  serp_warning: plan.warning, ratio, price_cad: price, market_too_low, price_needed, fees_cad: R(fees), profit_cad: profit, profit_with_ads_cad: profit_ads,
   marketing: { videos_cad: 0, ad_test_cad, breakeven_sales }, fba, can_list: !!best && !p.excluded,   // the owner decides even on a weak verdict
   ai_body: { model: 'jarvis-free', max_tokens: 1400, temperature: 0.6, response_format: { type: 'json_object' },
              messages: [{ role: 'system', content: sys }, { role: 'user', content: JSON.stringify(facts) }] } } }];
