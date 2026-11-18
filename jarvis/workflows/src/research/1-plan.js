@@ -14,9 +14,11 @@ const CONFIG = {
   warehouses: ['CA', 'US', 'CN'],
 };
 const store = $getWorkflowStaticData('global');
-const start = (store.kwIndex || 0) % CONFIG.keywords.length;
+// Themes follow the calendar (Toronto date): each day gets the next 3, whatever happened before
+// (re-imports and manual runs do not reset the rotation).
+const day = Math.floor(Date.parse(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }) + 'T12:00:00Z') / 864e5);
+const start = (day * CONFIG.per_run) % CONFIG.keywords.length;
 const picked = [0, 1, 2].slice(0, CONFIG.per_run).map(i => CONFIG.keywords[(start + i) % CONFIG.keywords.length]);
-store.kwIndex = start + CONFIG.per_run;
 // Owner can force themes ("research phone stands") through the webhook or another workflow.
 const inp = $input.first().json || {};
 const forced = inp.keywords || (inp.body && inp.body.keywords) || null;
