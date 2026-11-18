@@ -16,7 +16,10 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
 - [x] Agent with real free models: "what's our plan for Black Friday?" answered from the plan; "what's selling today?" called products_today and resent the saved report
 - [x] Idea check real run ("silicone garlic press"): 3 CJ suppliers (one US warehouse), 40 market offers, Amazon.ca ~13.66 CAD, verdict NOT RECOMMENDED (market 1.4x our cost); owner declined
 - [x] Screen: free models took up to 94 s (2 AI calls around a tool) -> "what's selling/viral today" answered without AI, screen waits 3 min; patch applied by the owner
-- [ ] To fix: suggested price when the market is too low (say "not profitable" instead of 2x market), supplier without a shipping quote listed last
+- [x] Fixed and applied by the owner 2026-11-17/18: idea report says "Not profitable" when the market is too low, unknown shipping shown as "?", unreadable links ask for the name;
+  research takes a backup shipping quote from China when CJ does not ship to Canada from the US/CA warehouse (seen live on a pet collar) and drops products without any quote;
+  readable market-check errors; themes rotate by calendar date (18 themes, 6-day cycle)
+- [ ] Learned live: many CJ "US warehouse" products do not ship to Canada from there; prefer products with a real fast quote to Canada
 - [x] Server reboot 2026-11-17: everything came back by itself; JARVIS answered on Telegram with today's research and the briefing (conversation memory reset, as expected)
 - [ ] Not yet tested live: Approve -> Shopify listing + 3 videos, photo/link idea checks, Shop v2 new-order alert (next real order)
 
