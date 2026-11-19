@@ -32,3 +32,10 @@ N['Verdict'] = [{ json: v }];
 const rep = run('11-report.js', [{ json: { error: 'x' } }], N)[0].json.report;
 ok(/Not profitable/.test(rep) && /no shipping quote/.test(rep), 'report says not profitable + no shipping quote');
 console.log(rep.split('\n').filter(l => /Price:|no shipping|Not profitable/.test(l)).join('\n'));
+// strict match: "dog bandana" must not match a poop bag holder
+N['Product identity'] = [{ json: { q: 'dog bandana', name: 'Dog bandana' } }];
+N['CJ searches'] = [{ json: { warehouse: 'US', token: 'T' } }];
+const sup = run('6-suppliers.js', [{ json: { data: { list: [
+  { pid: 'A', productNameEn: 'Dog Poop Bag Holder Dispenser', sellPrice: '1.2', listedNum: 900 },
+  { pid: 'B', productNameEn: 'Pet Dog Bandanas Triangle Scarf', sellPrice: '1.5', listedNum: 300 } ] } } }], N);
+ok(sup.length === 1 && sup[0].json.pid === 'B', 'dog bandana matches the scarf only, not the poop bag holder');

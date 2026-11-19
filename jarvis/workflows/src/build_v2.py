@@ -332,7 +332,7 @@ idn = [
   node("i41", "CJ product photos", "n8n-nodes-base.httpRequest", 4.2, [7700, -60], {
        "method": "GET", "url": CJ + "/product/query", "sendQuery": True,
        "queryParameters": {"parameters": [{"name": "pid", "value": "={{ $('Report').first().json.best.pid }}"}]},
-       "sendHeaders": True, "headerParameters": {"parameters": [{"name": "CJ-Access-Token", "value": "={{ $getWorkflowStaticData('global').cjToken ? $getWorkflowStaticData('global').cjToken.value : '' }}"}]},
+       "sendHeaders": True, "headerParameters": {"parameters": [{"name": "CJ-Access-Token", "value": "={{ $('Best 3 suppliers').first().json.token }}"}]},
        "options": {"timeout": 30000}}, onError="continueRegularOutput", alwaysOutputData=True),
   shop_token("i60", "Shopify token", [7810, -200]),
   shopify_gql("i42", "Shopify: collections + channels", [7920, -60],

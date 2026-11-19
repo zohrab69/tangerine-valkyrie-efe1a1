@@ -75,7 +75,7 @@ let verdict = 'MAYBE';
 if (p.excluded || !best || market_too_low || (ratio !== null && ratio < 1.6) || (profit !== null && profit < 5)) verdict = 'NO';
 else if (ratio !== null && ratio >= 2 && m.trend !== 'falling' && profit >= 10 && (best.days || 99) <= 10 && !risks.some(r => r.startsWith('Certification'))) verdict = 'GOOD';   // certification to check first = MAYBE
 const sys = 'IDEA_LISTING. You write for Rangéo, a Canadian online store (Quebec): French first, then English. Original wording only (never copy the supplier text), ' +
-  'no health or safety claims, no brand names, no fake reviews or fake scarcity. Reply with JSON only: {"title_fr": "max 70 chars", "title_en": "max 70 chars", ' +
+  'no health or safety claims, no brand names, no fake reviews or fake scarcity. Describe exactly the item in supplier_title (that is what the customer receives), not a different product. Reply with JSON only: {"title_fr": "max 70 chars", "title_en": "max 70 chars", ' +
   '"description_html": "<p>French paragraph</p><ul><li>3 French benefit bullets</li></ul><p>English paragraph</p><ul><li>3 English bullets</li></ul>", ' +
   '"tags": ["5 lowercase tags"], "product_type": "one or two words", ' +
   '"videos": [{"hook": "first 2 seconds, max 8 words", "lines": ["3 short voice-over lines, max 12 words each"], "caption": "post caption, max 150 chars", "hashtags": ["5 hashtags"]}] ' +

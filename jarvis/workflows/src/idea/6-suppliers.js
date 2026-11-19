@@ -3,8 +3,14 @@
 //@include shared/rules.js
 const p = $('Product identity').first().json;
 const searches = $('CJ searches').all().map(i => i.json);
-const words = t => new Set(String(t).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !['for', 'and', 'the', 'with', 'new'].includes(w)));
+const sing = w => w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w;
+const words = t => new Set(String(t).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !['for', 'and', 'the', 'with', 'new'].includes(w)).map(sing));
 const qw = words(p.q + ' ' + p.name);
+// The product itself (last word of the search, e.g. "bandana" in "dog bandana") must be in the supplier's title,
+// and at least 2 words must match: "dog bandana" must not match a "dog poop bag holder".
+const qList = [...words(p.q)];
+const noun = qList[qList.length - 1] || '';
+const need = Math.min(2, qList.length || 1);
 const seen = new Set(), all = [];
 $input.all().forEach((item, idx) => {
   const r = item.json || {};
@@ -16,7 +22,8 @@ $input.all().forEach((item, idx) => {
     const price = parseFloat(String(x.sellPrice ?? x.nowPrice ?? '').split('-')[0]);
     if (!name || !(price > 0)) continue;
     const overlap = [...words(name)].filter(w => qw.has(w)).length;
-    if (overlap === 0) continue;
+    const nameWords = words(name);
+    if (overlap < need || (noun && !nameWords.has(noun))) continue;
     const rule = checkRules(name + ' ' + (x.categoryName || ''));
     if (rule.excluded) continue;
     seen.add(pid);
