@@ -74,13 +74,21 @@ if (market_too_low) risks.push(`Not profitable at the market price: others sell 
 let verdict = 'MAYBE';
 if (p.excluded || !best || market_too_low || (ratio !== null && ratio < 1.6) || (profit !== null && profit < 5)) verdict = 'NO';
 else if (ratio !== null && ratio >= 2 && m.trend !== 'falling' && profit >= 10 && (best.days || 99) <= 10 && !risks.some(r => r.startsWith('Certification'))) verdict = 'GOOD';   // certification to check first = MAYBE
+// What the supplier says about the item (CJ product details): the listing and the videos describe THIS item only.
+let cj = {};
+try { cj = ($('CJ product details').first().json || {}).data || {}; } catch (e) { cj = {}; }
+const strip = t => String(t || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const supplier_description = strip(cj.description || cj.productDescription || cj.remark || '').slice(0, 900);
 const sys = 'IDEA_LISTING. You write for Rangéo, a Canadian online store (Quebec): French first, then English. Original wording only (never copy the supplier text), ' +
-  'no health or safety claims, no brand names, no fake reviews or fake scarcity. Describe exactly the item in supplier_title (that is what the customer receives), not a different product. Reply with JSON only: {"title_fr": "max 70 chars", "title_en": "max 70 chars", ' +
+  'no health or safety claims, no brand names, no fake reviews or fake scarcity. Describe exactly the item in supplier_title and supplier_description ' +
+  '(that is what the customer receives), never a different product and never uses it does not have. Reply with JSON only: {"title_fr": "max 70 chars", "title_en": "max 70 chars", ' +
   '"description_html": "<p>French paragraph</p><ul><li>3 French benefit bullets</li></ul><p>English paragraph</p><ul><li>3 English bullets</li></ul>", ' +
   '"tags": ["5 lowercase tags"], "product_type": "one or two words", ' +
-  '"videos": [{"hook": "first 2 seconds, max 8 words", "lines": ["3 short voice-over lines, max 12 words each"], "caption": "post caption, max 150 chars", "hashtags": ["5 hashtags"]}] ' +
-  '(exactly 3 videos with DIFFERENT hooks: a problem hook, a surprise/demo hook, a gift hook for Christmas). English for the videos.}';
-const facts = { product: p.name, supplier_title: best ? best.name : null, price_cad: price, warehouse: best ? best.warehouse : null, delivery_days: best ? best.shipping && best.shipping.days : null };
+  '"videos": [{"hook": "max 8 words: the real everyday problem this item solves, or a surprising fact about it", "lines": ["3 lines, max 11 words each: ' +
+  'line 1 says what the item is in plain words, line 2 one concrete feature from the supplier description (material, size, how it attaches or works), ' +
+  'line 3 a practical benefit or who it is for"], "caption": "post caption with a call to action, max 150 chars", "hashtags": ["5 hashtags"]}] ' +
+  '(exactly 3 videos, English, DIFFERENT hooks: 1 problem/solution, 2 quick demo ("watch this"), 3 gift idea for Christmas). Simple, honest, specific words; no hype like "upgrade their style instantly".}';
+const facts = { product: p.name, supplier_title: best ? best.name : null, supplier_description, price_cad: price, warehouse: best ? best.warehouse : null, delivery_days: best ? best.shipping && best.shipping.days : null };
 return [{ json: { id: p.id, name: p.name, q: p.q, kind: p.kind, url: p.url, page: p.page, verdict, risks, suppliers: sup, best, market: m, market_source: plan.source,
   serp_warning: plan.warning, ratio, price_cad: price, market_too_low, price_needed, fees_cad: R(fees), profit_cad: profit, profit_with_ads_cad: profit_ads,
   marketing: { videos_cad: 0, ad_test_cad, breakeven_sales }, fba, can_list: !!best && !p.excluded,   // the owner decides even on a weak verdict

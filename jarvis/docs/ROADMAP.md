@@ -20,6 +20,13 @@ Legend: `[x]` done and verified · `[~]` built in this repo, not yet run on your
   research takes a backup shipping quote from China when CJ does not ship to Canada from the US/CA warehouse (seen live on a pet collar) and drops products without any quote;
   readable market-check errors; themes rotate by calendar date (18 themes, 6-day cycle)
 - [ ] Learned live: many CJ "US warehouse" products do not ship to Canada from there; prefer products with a real fast quote to Canada
+- [x] First live Approve 2026-11-19: product created on Shopify and videos sent, BUT wrong match ("dog bandana" title on a poop-bag dispenser, matched on the word "dog"),
+  one photo only (CJ details fetched without a token), videos = one photo + generic text. Owner set it to draft. Owner: store theme still shows demo content
+- [~] Fixes 2026-11-20: strict supplier match (product noun + 2 words), all CJ photos, CJ details fetched before the report so the listing and the video scripts
+  describe the real item; **Video team v2**: supplier's real product video when CJ has one (productVideo), several photos otherwise, TikTok-style captions,
+  scripts with problem / demo / gift hooks and one concrete feature each, video 3 without voice (for a trending sound). Needs: re-import Idea v1, voice-setup.sh
+- [ ] Store: replace the theme's demo sections (banner, collections, About/Contact/shipping/returns pages, trust details) before Black Friday
+- [ ] Best videos: owner films 10-20 s with a sample; JARVIS edits (planned next)
 - [x] Server reboot 2026-11-17: everything came back by itself; JARVIS answered on Telegram with today's research and the briefing (conversation memory reset, as expected)
 - [ ] Not yet tested live: Approve -> Shopify listing + 3 videos, photo/link idea checks, Shop v2 new-order alert (next real order)
 

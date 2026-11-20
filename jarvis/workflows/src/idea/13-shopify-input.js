@@ -3,7 +3,7 @@
 const rep = $('Report').first().json;
 const g = ($input.first().json || {}).data || {};
 let cj = {};
-try { cj = ($('CJ product photos').first().json || {}).data || {}; } catch (e) { cj = {}; }
+try { cj = ($('CJ product details').first().json || {}).data || {}; } catch (e) { cj = {}; }
 let imgs = cj.productImageSet || cj.productImage || [];
 if (typeof imgs === 'string') { try { imgs = imgs.trim().startsWith('[') ? JSON.parse(imgs) : [imgs]; } catch (e) { imgs = [imgs]; } }
 imgs = [...new Set([rep.best && rep.best.image, ...(Array.isArray(imgs) ? imgs : [])].filter(u => typeof u === 'string' && /^https?:\/\//.test(u)).map(u => u.replace(/^http:/, 'https:')))].slice(0, 6);

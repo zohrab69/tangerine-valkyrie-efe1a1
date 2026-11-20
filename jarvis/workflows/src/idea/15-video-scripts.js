@@ -1,7 +1,11 @@
 // Video team: 3 short vertical videos (different hooks) from the product photos + JARVIS's voice.
 // The server's voice service renders each one (POST /video); captions and hashtags go with each video.
 const rep = $('Report').first().json;
-const imgs = ($('Product for Shopify').first().json.gql.variables.input.files || []).map(f => f.originalSource).slice(0, 5);
+const imgs = ($('Product for Shopify').first().json.gql.variables.input.files || []).map(f => f.originalSource).slice(0, 6);
+// Real footage: any supplier video (.mp4) in the CJ product details.
+let cjd = {};
+try { cjd = $('CJ product details').first().json || {}; } catch (e) { cjd = {}; }
+const footage = [...new Set((JSON.stringify(cjd).match(/https?:\\?\/\\?\/[^"\s]+?\.mp4/gi) || []).map(u => u.replace(/\\\//g, '/').replace(/^http:/, 'https:')))].slice(0, 2);
 let vids = rep.listing.videos || [];
 const name = rep.name;
 const fallback = [
@@ -16,6 +20,8 @@ vids = vids.slice(0, 3).map((v, i) => ({ hook: String(v.hook || fallback[i].hook
   hashtags: (Array.isArray(v.hashtags) && v.hashtags.length ? v.hashtags : fallback[i].hashtags).slice(0, 6).map(h => '#' + String(h).replace(/^#+/, '').replace(/\s+/g, '')) }));
 const esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const scripts = '<b>🎬 Video team: 3 scripts for ' + esc(rep.listing.title_fr) + '</b>\n' + vids.map((v, i) => `\n<b>${i + 1}. Hook:</b> ${esc(v.hook)}\nVoice: ${esc(v.lines.join(' '))}\nCaption: ${esc(v.caption)} ${esc(v.hashtags.join(' '))}`).join('\n') +
-  '\n\nThe videos follow. Post them yourself on TikTok, Reels and Shorts (auto-posting needs each platform\'s API approval).';
+  '\n\n' + (footage.length ? '🎥 Made from the supplier\'s real product video.' : '📷 No supplier video found: made from the product photos. For the best results, film 10-20 s with the sample and send it to me.') +
+  '\nVideo 3 has no voice: add a trending sound in TikTok/Instagram. Post them yourself (auto-posting needs each platform\'s API approval).';
 return vids.map((v, i) => ({ json: { n: i + 1, scripts, caption: `${v.caption}\n${v.hashtags.join(' ')}`.slice(0, 1000),
-  video_body: { images: imgs.length ? imgs : [rep.photo].filter(Boolean), hook: v.hook, lines: v.lines, voice: 'am_adam', price: `${rep.price_cad} CAD`, brand: 'Rangéo' } } }));
+  video_body: { videos: footage, images: imgs.length ? imgs : [rep.photo].filter(Boolean), hook: v.hook, lines: v.lines,
+                voice: i < 2, price: `${rep.price_cad} CAD`, brand: 'Rangéo' } } }));   // video 3: captions only, add a trending sound in the app

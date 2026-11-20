@@ -39,3 +39,13 @@ const sup = run('6-suppliers.js', [{ json: { data: { list: [
   { pid: 'A', productNameEn: 'Dog Poop Bag Holder Dispenser', sellPrice: '1.2', listedNum: 900 },
   { pid: 'B', productNameEn: 'Pet Dog Bandanas Triangle Scarf', sellPrice: '1.5', listedNum: 300 } ] } } }], N);
 ok(sup.length === 1 && sup[0].json.pid === 'B', 'dog bandana matches the scarf only, not the poop bag holder');
+// video scripts: supplier footage found in CJ details, 3 videos, the 3rd without voice
+N['Report'] = [{ json: { name: 'Poop bag dispenser', price_cad: 12.99, photo: 'https://x/p.jpg', listing: { title_fr: 'Distributeur', videos: [
+  { hook: 'Tired of loose poop bags?', lines: ['A clip-on dispenser.', 'Holds one roll.', 'For every walk.'], caption: 'Walk ready', hashtags: ['dog'] }] } } }];
+N['Product for Shopify'] = [{ json: { gql: { variables: { input: { files: [{ originalSource: 'https://x/1.jpg' }, { originalSource: 'https://x/2.jpg' }] } } } } }];
+N['CJ product details'] = [{ json: { data: { productVideo: 'https:\/\/cc-west-usa.oss-us-west-1.aliyuncs.com\/video\/abc.mp4', description: '<p>ABS</p>' } } }];
+const vs = run('15-video-scripts.js', [{ json: {} }], N).map(i => i.json);
+ok(vs.length === 3 && vs[0].video_body.videos[0].endsWith('/abc.mp4') && vs[0].video_body.voice === true && vs[2].video_body.voice === false && /real product video/.test(vs[0].scripts),
+   'video scripts: supplier footage ' + vs[0].video_body.videos[0] + ', video 3 silent');
+N['CJ product details'] = [{ json: { data: {} } }];
+ok(/No supplier video/.test(run('15-video-scripts.js', [{ json: {} }], N)[0].json.scripts), 'no footage: photos + ask the owner to film');
